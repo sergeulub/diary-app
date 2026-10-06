@@ -10,6 +10,8 @@
   --line: #DEDCCB;
   --accent: #65763F;
   --accent-ink: #FFFFFF;
+  --card-shadow: 0 1px 0 rgba(60, 40, 20, 0.04), 0 8px 20px rgba(60, 40, 20, 0.07);
+  --danger: #A4472F;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -20,6 +22,8 @@
     --line: #33372D;
     --accent: #A9BC7E;
     --accent-ink: #181A15;
+    --card-shadow: none;
+    --danger: #E08A6E;
   }
 }
 
@@ -31,6 +35,8 @@
   --color-line: var(--line);
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
+  --color-danger: var(--danger);
+  --shadow-card: var(--card-shadow);
   --font-serif: "Lora", Georgia, serif;
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
 }
@@ -43,3 +49,4 @@ body {
   font-family: var(--font-sans);
   -webkit-text-size-adjust: 100%;
 }
+button { -webkit-tap-highlight-color: transparent; }
