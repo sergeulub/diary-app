@@ -1,0 +1,11 @@
+{
+  "name": "Дневник — проба 2",
+  "short_name": "Проба 2",
+  "lang": "ru",
+  "start_url": "/diary-app/probe2/",
+  "scope": "/diary-app/probe2/",
+  "display": "standalone",
+  "background_color": "#E3DDC8",
+  "theme_color": "#E3DDC8",
+  "icons": [{ "src": "/diary-app/pwa-192x192.png", "sizes": "192x192", "type": "image/png" }]
+}
