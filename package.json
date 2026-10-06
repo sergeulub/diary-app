@@ -1,6 +1,6 @@
 {
   "name": "diary-app",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "scripts": {
     "test": "vitest run",
     "dev": "vite",
