@@ -1,0 +1,24 @@
+# Зависимости и сборка
+node_modules/
+dist/
+dev-dist/
+coverage/
+*.local
+
+# Личные данные дневника — никогда не коммитить
+exports/
+backups/
+*.diary.json
+
+# Локальные настройки
+.claude/settings.local.json
+.env
+.env.*
+
+# Система и редакторы
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/*
+!.vscode/extensions.json
+*.log
