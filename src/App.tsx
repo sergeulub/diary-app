@@ -4,6 +4,7 @@ import { getMeta, initDb } from './db/diary'
 import { requestPersistence } from './db/storage'
 import { errorText } from './ui/errors'
 import CalendarScreen from './ui/CalendarScreen'
+import SettingsScreen from './ui/SettingsScreen'
 import SummaryScreen from './ui/SummaryScreen'
 import TabBar, { type Tab } from './ui/TabBar'
 
@@ -30,7 +31,7 @@ export default function App() {
       <main className="min-h-0 flex-1 overflow-y-auto">
         {tab === 'summary' && <SummaryScreen meta={meta} />}
         {tab === 'calendar' && <CalendarScreen meta={meta} />}
-        {tab === 'settings' && <p className="p-5 text-muted">Экран появится в следующей задаче плана.</p>}
+        {tab === 'settings' && <SettingsScreen meta={meta} />}
       </main>
       <TabBar tab={tab} onChange={setTab} />
     </div>
