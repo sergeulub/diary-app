@@ -59,7 +59,8 @@ function parseDayRecord(x: unknown, i: number, defs: Map<string, MetricDefinitio
   const where = `День ${x.day}`
   if (
     !isStr(x.id) || !isObj(x.metrics) || !isStr(x.text) || !isStamp(x.createdAt) || !isStamp(x.updatedAt) ||
-    !(x.deletedAt === null || x.deletedAt === undefined || isStamp(x.deletedAt))
+    !(x.deletedAt === null || x.deletedAt === undefined || isStamp(x.deletedAt)) ||
+    !(x.completedAt === undefined || isStamp(x.completedAt))
   ) {
     throw new ImportError(`${where}: ${BAD_FIELDS}`)
   }
@@ -78,6 +79,7 @@ function parseDayRecord(x: unknown, i: number, defs: Map<string, MetricDefinitio
     createdAt: x.createdAt,
     updatedAt: x.updatedAt,
     deletedAt: isStamp(x.deletedAt) ? x.deletedAt : null,
+    ...(isStamp(x.completedAt) ? { completedAt: x.completedAt } : {}),
   }
 }
 

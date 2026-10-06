@@ -124,3 +124,16 @@ describe('describeImport', () => {
     expect(describeImport(plan)).toBe('Дней: будет добавлено 1, обновлено 0. Метрик: будет добавлено 4, обновлено 0.')
   })
 })
+
+describe('completedAt', () => {
+  it('переносится импортом, а пустое значение отбрасывается', () => {
+    const done = dayRec('2026-10-06', { completedAt: '2026-10-06T23:00:00.000+03:00' })
+    const days = parseImport(json(snapshot({ days: [done, dayRec('2026-10-05')] }))).days
+    expect(days[0].completedAt).toBe('2026-10-06T23:00:00.000+03:00')
+    expect('completedAt' in days[1]).toBe(false)
+  })
+  it('неверная метка completedAt отклоняется', () => {
+    const bad = dayRec('2026-10-06', { completedAt: 'вчера' })
+    expect(() => parseImport(json(snapshot({ days: [bad] })))).toThrow(/День 2026-10-06/)
+  })
+})

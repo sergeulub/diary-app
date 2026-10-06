@@ -6,7 +6,8 @@ import { parseImport, planImport } from '../domain/importFormat'
 import { DEFAULT_METRICS } from '../domain/metrics'
 import { db } from './database'
 import {
-  applyImport, exportSnapshot, getDay, getMeta, getMetrics, initDb, listDays, listFilledDays, saveDay, saveMetrics, setMeta,
+  applyImport, exportSnapshot, getDay, getMeta, getMetrics, initDb, listDays, listFilledDays, listStreakDays, saveDay, saveMetrics,
+  setMeta,
 } from './diary'
 
 const at = (d: number, h = 22) => new Date(2026, 9, d, h)
@@ -91,5 +92,41 @@ describe('экспорт → чистая база → импорт', () => {
     const after = await exportSnapshot()
     expect(after.days).toEqual(before.days)
     expect(after.metricDefinitions).toEqual(before.metricDefinitions)
+  })
+})
+
+describe('серия: completedAt', () => {
+  const all = { mood: 3, boredom: 2, sleepStart: '00:25', sleepEnd: '09:45' }
+  const text40 = 'Сегодня делал календарь и ходил в магазин'
+
+  it('день, заполненный полностью до 06:00 следующего утра, засчитывается за свою дату', async () => {
+    await saveDay('2026-10-06', { metrics: all }, at(6, 23))
+    const rec = await saveDay('2026-10-06', { text: text40 }, new Date(2026, 9, 7, 5, 59))
+    expect(rec.completedAt).toBe(isoWithOffset(new Date(2026, 9, 7, 5, 59)))
+    expect(await listStreakDays()).toEqual(['2026-10-06'])
+  })
+  it('дозаполненный после 06:00 следующего дня — не засчитывается', async () => {
+    await saveDay('2026-10-05', { metrics: all }, at(5, 22))
+    const rec = await saveDay('2026-10-05', { text: text40 }, new Date(2026, 9, 6, 6, 0))
+    expect(rec.completedAt).toBeUndefined()
+    expect(await listStreakDays()).toEqual([])
+  })
+  it('прошлый день, заполненный задним числом, не засчитывается', async () => {
+    await saveDay('2026-10-04', { metrics: all, text: text40 }, at(6, 20))
+    expect(await listStreakDays()).toEqual([])
+  })
+  it('частично заполненный день не засчитывается', async () => {
+    await saveDay('2026-10-06', { metrics: { mood: 3 }, text: text40 }, at(6, 23))
+    expect(await listStreakDays()).toEqual([])
+  })
+  it('раз засчитанный день остаётся засчитанным после правок', async () => {
+    await saveDay('2026-10-06', { metrics: all, text: text40 }, at(6, 23))
+    await saveDay('2026-10-06', { text: 'коротко' }, new Date(2026, 9, 8, 12))
+    expect(await listStreakDays()).toEqual(['2026-10-06'])
+  })
+  it('учитывает границу дня из настроек', async () => {
+    await setMeta('boundaryHour', 4)
+    await saveDay('2026-10-06', { metrics: all, text: text40 }, new Date(2026, 9, 7, 5, 0))
+    expect(await listStreakDays()).toEqual([])
   })
 })

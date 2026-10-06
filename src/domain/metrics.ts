@@ -48,6 +48,15 @@ export function isDayFilled(rec: Pick<DayRecord, 'metrics' | 'text' | 'deletedAt
   return Object.keys(rec.metrics).length > 0 || rec.text.trim() !== ''
 }
 
+/** Сколько символов текста нужно, чтобы день засчитался в серию. */
+export const STREAK_TEXT_MIN = 40
+
+/** Полный день: заполнены все активные метрики и текст не короче STREAK_TEXT_MIN символов. */
+export function isDayComplete(rec: Pick<DayRecord, 'metrics' | 'text'>, defs: MetricDefinition[]): boolean {
+  if (rec.text.trim().length < STREAK_TEXT_MIN) return false
+  return activeMetrics(defs).every((d) => rec.metrics[d.key] !== undefined)
+}
+
 export function sortMetrics(defs: MetricDefinition[]): MetricDefinition[] {
   return [...defs].sort((a, b) => a.order - b.order || a.key.localeCompare(b.key))
 }

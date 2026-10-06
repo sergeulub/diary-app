@@ -25,6 +25,8 @@ export interface DayRecord {
   createdAt: string
   updatedAt: string
   deletedAt: string | null
+  /** Когда день впервые заполнен полностью в свой логический день — только такие дни идут в серию. */
+  completedAt?: string
 }
 
 /** Заготовка под дневную ленту; в MVP пустая. */

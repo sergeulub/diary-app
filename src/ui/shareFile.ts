@@ -1,7 +1,8 @@
 export async function shareOrDownload(file: File): Promise<'shared' | 'downloaded' | 'cancelled'> {
   if (navigator.canShare?.({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: file.name })
+      // без title: Telegram отправляет его отдельным сообщением
+      await navigator.share({ files: [file] })
       return 'shared'
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return 'cancelled'

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_METRICS, activeMetrics, createMetric, formCards, isDayFilled, moveMetric, newMetricKey,
-  renameMetric, setArchived, validateMetricValue, type FormCard,
+  isDayComplete, renameMetric, setArchived, validateMetricValue, type FormCard,
 } from './metrics'
 import { dayRec } from './testFixtures'
 import type { MetricDefinition, MetricType } from './types'
@@ -122,5 +122,27 @@ describe('setArchived', () => {
   })
   it('в архив — порядок не меняется', () => {
     expect(setArchived(DEFAULT_METRICS[1], true, DEFAULT_METRICS, NOW)).toMatchObject({ archived: true, order: 2 })
+  })
+})
+
+describe('isDayComplete', () => {
+  const all = { mood: 3, boredom: 2, sleepStart: '00:25', sleepEnd: '09:45' }
+  const text40 = 'Сегодня делал календарь и ходил в магазин'
+  it('все активные метрики и текст ≥ 40 символов — полный', () => {
+    expect(text40.length).toBeGreaterThanOrEqual(40)
+    expect(isDayComplete(dayRec('2026-10-06', { metrics: all, text: text40 }), DEFAULT_METRICS)).toBe(true)
+  })
+  it('текст короче 40 символов без пробелов по краям — не полный', () => {
+    const short = '   ' + 'я'.repeat(39) + '   '
+    expect(isDayComplete(dayRec('2026-10-06', { metrics: all, text: short }), DEFAULT_METRICS)).toBe(false)
+  })
+  it('не хватает одной метрики — не полный', () => {
+    const { sleepEnd: _, ...partial } = all
+    expect(isDayComplete(dayRec('2026-10-06', { metrics: partial, text: text40 }), DEFAULT_METRICS)).toBe(false)
+  })
+  it('новая активная метрика тоже обязательна, архивная — нет', () => {
+    const defs = [...DEFAULT_METRICS, custom('m1', 5), custom('m2', 6, { archived: true })]
+    expect(isDayComplete(dayRec('2026-10-06', { metrics: all, text: text40 }), defs)).toBe(false)
+    expect(isDayComplete(dayRec('2026-10-06', { metrics: { ...all, m1: 1 }, text: text40 }), defs)).toBe(true)
   })
 })

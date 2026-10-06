@@ -1,7 +1,8 @@
 import Dexie from 'dexie'
 import { isoWithOffset } from '../domain/dates'
 import type { ImportPlan } from '../domain/importFormat'
-import { DEFAULT_METRICS, isDayFilled, sortMetrics } from '../domain/metrics'
+import { logicalDay } from '../domain/logicalDay'
+import { DEFAULT_METRICS, isDayComplete, isDayFilled, sortMetrics } from '../domain/metrics'
 import type { DayRecord, DiarySnapshot, Meta, MetricDefinition, MetricValue } from '../domain/types'
 import { db } from './database'
 
@@ -49,16 +50,24 @@ export async function listFilledDays(): Promise<string[]> {
   return (await db.days.toArray()).filter(isDayFilled).map((d) => d.day)
 }
 
+/** Дни, засчитанные в серию: полностью заполнены в свой логический день. */
+export async function listStreakDays(): Promise<string[]> {
+  return (await db.days.toArray()).filter((d) => d.completedAt && !d.deletedAt).map((d) => d.day)
+}
+
 export interface DayPatch {
   /** null удаляет значение метрики. */
   metrics?: Record<string, MetricValue | null>
   text?: string
 }
 
-/** Чтение и запись в одной транзакции: одновременные сохранения метрики и текста не затирают друг друга. */
+/**
+ * Чтение и запись в одной транзакции: одновременные сохранения метрики и текста не затирают друг друга.
+ * Если день впервые стал полным в свой логический день — ставит completedAt (день идёт в серию).
+ */
 export async function saveDay(day: string, patch: DayPatch, now: Date): Promise<DayRecord> {
   const stamp = isoWithOffset(now)
-  return db.transaction('rw', db.days, async () => {
+  return db.transaction('rw', [db.days, db.metricDefinitions, db.meta], async () => {
     const current = await db.days.get(day)
     const metrics = { ...(current?.metrics ?? {}) }
     for (const [key, value] of Object.entries(patch.metrics ?? {})) {
@@ -73,6 +82,13 @@ export async function saveDay(day: string, patch: DayPatch, now: Date): Promise<
       createdAt: current?.createdAt ?? stamp,
       updatedAt: stamp,
       deletedAt: null,
+      ...(current?.completedAt ? { completedAt: current.completedAt } : {}),
+    }
+    if (!rec.completedAt) {
+      const { boundaryHour } = await getMeta()
+      if (logicalDay(now, boundaryHour) === day && isDayComplete(rec, await db.metricDefinitions.toArray())) {
+        rec.completedAt = stamp
+      }
     }
     await db.days.put(rec)
     return rec

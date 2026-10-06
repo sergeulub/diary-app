@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { listFilledDays } from '../db/diary'
+import { listFilledDays, listStreakDays } from '../db/diary'
 import { needsBackupReminder } from '../domain/backupReminder'
 import { formatDayTitle } from '../domain/ru'
 import { streak, streakLabel } from '../domain/streak'
@@ -23,7 +23,8 @@ function StreakChip({ text }: { text: string }) {
 export default function SummaryScreen({ meta }: { meta: Meta }) {
   const today = useLogicalToday(meta.boundaryHour)
   const filled = useLiveQuery(listFilledDays)
-  const label = filled ? streakLabel(streak(new Set(filled), today)) : null
+  const counted = useLiveQuery(listStreakDays)
+  const label = counted ? streakLabel(streak(new Set(counted), today)) : null
   const [weekday, date] = formatDayTitle(today).split(', ')
 
   return (
