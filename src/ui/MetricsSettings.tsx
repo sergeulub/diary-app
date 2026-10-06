@@ -53,7 +53,8 @@ export default function MetricsSettings() {
           <li key={def.key} className="flex items-center gap-1 border-b border-line py-1.5 last:border-b-0">
             <div className="flex min-w-0 flex-1 flex-col">
               <input
-                defaultValue={def.name} aria-label="Название метрики"
+                // ключ по имени: поле неуправляемое и должно обновиться, если имя сменил импорт
+                key={def.name} defaultValue={def.name} aria-label="Название метрики"
                 onBlur={(e) => {
                   const renamed = renameMetric(def, e.target.value, now())
                   if (renamed) save([renamed])

@@ -1,6 +1,7 @@
 import { setMeta } from '../db/diary'
 import { pad } from '../domain/dates'
 import type { Meta } from '../domain/types'
+import DataSettings from './DataSettings'
 import { Card } from './MetricCards'
 import MetricsSettings from './MetricsSettings'
 
@@ -23,6 +24,7 @@ export default function SettingsScreen({ meta }: { meta: Meta }) {
           </select>
         </label>
       </Card>
+      <DataSettings meta={meta} />
       <Card title="Напоминание">
         <p className="text-[15px] leading-[1.5] text-muted">
           Откройте «Команды» → «Автоматизация» → «+» → «Время суток»: 23:00, ежедневно, «Запускать сразу». Действие —
