@@ -50,3 +50,5 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 button { -webkit-tap-highlight-color: transparent; }
+/* значок часов в Chromium съедает место; на iOS его нет, время выбирается системным колесом */
+input[type="time"]::-webkit-calendar-picker-indicator { display: none; }

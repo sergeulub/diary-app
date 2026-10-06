@@ -6,7 +6,10 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   base: '/diary-app/',
-  define: { __BUILD_TIME__: JSON.stringify(new Date().toISOString()) },
+  define: {
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? 'dev'),
+  },
   plugins: [
     react(),
     tailwindcss(),
@@ -32,7 +35,6 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
-        navigateFallbackDenylist: [/^\/diary-app\/probe2\//],
       },
     }),
   ],

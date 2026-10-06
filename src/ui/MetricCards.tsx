@@ -86,7 +86,7 @@ function BoolChoice({ value, onChange }: { value: MetricValue | undefined; onCha
 /** Системный выбор времени iOS; «Сбросить» в нём очищает значение. */
 function TimeField({ label, value, onChange }: { label: string; value: MetricValue | undefined; onChange: OnChange }) {
   return (
-    <label className="flex w-[108px] flex-col gap-0.5 rounded-[14px] border border-line bg-bg px-3.5 py-2.5">
+    <label className="flex min-w-[108px] flex-1 flex-col gap-0.5 rounded-[14px] border border-line bg-bg px-3.5 py-2.5">
       <span className="text-[13px] text-muted">{label}</span>
       <input
         type="time" value={typeof value === 'string' ? value : ''}
@@ -125,7 +125,11 @@ export function MetricCard({ def, value, onChange }: { def: MetricDefinition; va
     <Card title={def.name}>
       {def.type === 'scale' && def.face && <FaceScale name={def.name} face={def.face} value={value} onChange={onChange} />}
       {def.type === 'scale' && !def.face && <DigitScale name={def.name} value={value} onChange={onChange} />}
-      {def.type === 'time' && <TimeField label="время" value={value} onChange={onChange} />}
+      {def.type === 'time' && (
+        <div className="flex w-1/2">
+          <TimeField label="время" value={value} onChange={onChange} />
+        </div>
+      )}
       {def.type === 'number' && <NumberField def={def} value={value} onChange={onChange} />}
       {def.type === 'bool' && <BoolChoice value={value} onChange={onChange} />}
     </Card>
@@ -145,7 +149,7 @@ export function SleepCard({ start, end, metrics, onChange }: {
         <TimeField label={start.name} value={metrics[start.key]} onChange={(v) => onChange(start.key, v)} />
         <TimeField label={end.name} value={metrics[end.key]} onChange={(v) => onChange(end.key, v)} />
         {duration !== null && (
-          <div className="flex flex-1 flex-col items-end gap-0.5">
+          <div className="flex flex-none flex-col items-end gap-0.5">
             <span className="text-[15px] font-semibold">{formatDuration(duration)}</span>
             <span className="text-[13px] text-muted">сон</span>
           </div>
