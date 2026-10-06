@@ -2,7 +2,8 @@
 
 **Стек:** React + TypeScript + Vite, Dexie.js (IndexedDB), vite-plugin-pwa, Tailwind CSS, тесты — Vitest ·
 **Адрес навсегда:** `https://sergeulub.github.io/diary-app/` (GitHub Pages, публичный репозиторий `sergeulub/diary-app`) ·
-**Запуск / проверка:** кода пока нет — появится в Фазе 0
+**Запуск / проверка:** `npm run dev` → http://localhost:5173/diary-app/ · `npm test` · `npm run build` ·
+деплой — push в `main` (GitHub Actions → Pages)
 
 **Утверждённая спецификация MVP — `docs/superpowers/specs/2026-10-06-diary-mvp-design.md`.** Она главнее этого файла
 в деталях экранов, правил, экспорта и стиля. `ОПИСАНИЕ.md` — обоснования: варианты установки на iOS, аналоги, риски,
@@ -55,7 +56,12 @@
 Настроение и скука — нарисованные мордочки «от руки» (SVG), не эмодзи. Токены цвета и правила — в спецификации, §8.
 
 ## Структура
-Появится в Фазе 0: `src/domain/`, `src/db/`, `src/ui/`.
+- `src/domain/` — чистая логика с тестами рядом (`*.test.ts`).
+- `src/db/` — единственный доступ к IndexedDB (Dexie) и `navigator.storage`.
+- `src/ui/` — React-экраны; сейчас только `ProbeScreen` Фазы 0.
+- `public/` — иконки PWA (генерируются `npm run icons` из `public/icon.svg`); `public/probe2/` — проверка изоляции
+  хранилища (удалить в Фазе 1).
+- `docs/superpowers/` — спецификации и планы; `docs/phase0-results.md` — результаты проверок на iPhone.
 
 ## Этапы
 - **Фаза 0** — скелет PWA на GitHub Pages → установить на iPhone → авиарежим и проверки из спецификации §10.
@@ -69,5 +75,6 @@
 - Отдаёт ли Dailybean экспорт истории (импорт — после MVP).
 
 ## Текущее состояние
-- [06.10.2026] Брейнсторм завершён, спецификация MVP написана и ждёт проверки пользователем. Кода нет.
-  Дальше — план реализации (Superpowers `writing-plans`), затем Фаза 0.
+- [06.10.2026] Спецификация MVP утверждена. Код Фазы 0 готов (экран проверок, PWA, офлайн, тестовый zip, «Проба 2»),
+  прошёл финальное ревью. Ждёт: создания репозитория `sergeulub/diary-app` на GitHub, первого push и проверок на
+  iPhone по `docs/phase0-results.md`. После них — план Фазы 1.
