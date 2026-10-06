@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { getMeta, initDb } from './db/diary'
 import { requestPersistence } from './db/storage'
 import { errorText } from './ui/errors'
+import CalendarScreen from './ui/CalendarScreen'
 import SummaryScreen from './ui/SummaryScreen'
 import TabBar, { type Tab } from './ui/TabBar'
 
@@ -28,7 +29,8 @@ export default function App() {
     <div className="flex h-dvh flex-col">
       <main className="min-h-0 flex-1 overflow-y-auto">
         {tab === 'summary' && <SummaryScreen meta={meta} />}
-        {tab !== 'summary' && <p className="p-5 text-muted">Экран появится в следующей задаче плана.</p>}
+        {tab === 'calendar' && <CalendarScreen meta={meta} />}
+        {tab === 'settings' && <p className="p-5 text-muted">Экран появится в следующей задаче плана.</p>}
       </main>
       <TabBar tab={tab} onChange={setTab} />
     </div>
