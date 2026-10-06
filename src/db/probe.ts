@@ -19,9 +19,10 @@ export async function firstVisitAt(): Promise<string | undefined> {
 
 export const ISOLATION_MARKER_KEY = 'diary-probe-marker'
 
-export function writeIsolationMarker(at: string): void {
+/** Отметка для «Пробы 2»: время и откуда открыт «Дневник» (с иконки или во вкладке Safari). */
+export function writeIsolationMarker(at: string, standalone: boolean): void {
   try {
-    localStorage.setItem(ISOLATION_MARKER_KEY, at)
+    localStorage.setItem(ISOLATION_MARKER_KEY, JSON.stringify({ at, standalone }))
   } catch {
     // хранилище недоступно — проверка изоляции покажет «нет маркера»
   }

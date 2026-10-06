@@ -26,12 +26,17 @@ export default function ProbeScreen() {
 
   useEffect(() => {
     const now = new Date().toISOString()
-    writeIsolationMarker(now)
-    recordVisit(now).then((n) => setVisits(String(n)))
-    firstVisitAt().then((at) => setFirst(at ? new Date(at).toLocaleString('ru-RU') : 'нет'))
-    requestPersistence().then((r) =>
-      setPersist({ granted: 'да', denied: 'нет', unsupported: 'не поддерживается' }[r]),
-    )
+    const fail = (e: unknown) => `ошибка: ${e instanceof Error ? e.message : String(e)}`
+    writeIsolationMarker(now, standalone)
+    recordVisit(now)
+      .then((n) => setVisits(String(n)))
+      .catch((e) => setVisits(fail(e)))
+    firstVisitAt()
+      .then((at) => setFirst(at ? new Date(at).toLocaleString('ru-RU') : 'нет'))
+      .catch((e) => setFirst(fail(e)))
+    requestPersistence()
+      .then((r) => setPersist({ granted: 'да', denied: 'нет', unsupported: 'не поддерживается' }[r]))
+      .catch((e) => setPersist(fail(e)))
     const update = () => setOnline(navigator.onLine)
     window.addEventListener('online', update)
     window.addEventListener('offline', update)
@@ -39,7 +44,7 @@ export default function ProbeScreen() {
       window.removeEventListener('online', update)
       window.removeEventListener('offline', update)
     }
-  }, [])
+  }, [standalone])
 
   async function onShare() {
     const { fileName, bytes } = buildTestZip(new Date())
@@ -78,9 +83,10 @@ export default function ProbeScreen() {
         </button>
         <span className="text-[13px] text-muted">Результат: {share}</span>
       </section>
-      <a href="/diary-app/probe2/" className="text-[15px] text-accent underline">
-        Открыть «Пробу 2» (проверка изоляции)
-      </a>
+      <p className="text-[13px] text-muted">
+        Проверка изоляции: откройте в Safari sergeulub.github.io/diary-app/probe2/, добавьте на экран «Домой» и
+        запустите «Пробу 2» с иконки. Ссылки отсюда нет: внутри приложения «Проба 2» открылась бы с тем же хранилищем.
+      </p>
     </main>
   )
 }

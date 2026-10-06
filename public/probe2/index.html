@@ -18,22 +18,37 @@
 </head>
 <body>
 <h1>Проба 2: изоляция</h1>
-<div class="row"><b>Маркер основного приложения (localStorage)</b><span id="marker">…</span></div>
+<div class="row"><b>Где открыта эта страница</b><span id="mode">…</span></div>
+<div class="row"><b>Отметка «Дневника» (localStorage)</b><span id="marker">…</span></div>
 <div class="row"><b>Базы IndexedDB, видимые отсюда</b><span id="dbs">…</span></div>
 <div class="row"><b>Вывод</b><span id="verdict">…</span></div>
-<script>
-  (async () => {
-    let marker = null
-    try { marker = localStorage.getItem('diary-probe-marker') } catch (e) {}
-    document.getElementById('marker').textContent = marker || 'нет'
-    let names = []
-    try { names = (await indexedDB.databases()).map((d) => d.name) } catch (e) { names = ['(список недоступен)'] }
+<script type="module">
+  import { isolationVerdict } from './verdict.js'
+
+  const selfStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true
+  document.getElementById('mode').textContent = selfStandalone ? 'приложение с экрана «Домой»' : 'вкладка Safari'
+
+  let markerRaw = null
+  try { markerRaw = localStorage.getItem('diary-probe-marker') } catch (e) {}
+  let markerText = 'нет'
+  if (markerRaw) {
+    try {
+      const m = JSON.parse(markerRaw)
+      markerText = new Date(m.at).toLocaleString('ru-RU') + (m.standalone ? ' — из установленного «Дневника»' : ' — из вкладки Safari')
+    } catch (e) {
+      markerText = markerRaw + ' — источник неизвестен'
+    }
+  }
+  document.getElementById('marker').textContent = markerText
+
+  try {
+    const names = (await indexedDB.databases()).map((d) => d.name)
     document.getElementById('dbs').textContent = names.length ? names.join(', ') : 'нет'
-    const shared = Boolean(marker) || names.includes('diary-probe')
-    document.getElementById('verdict').textContent = shared
-      ? 'Хранилище ОБЩЕЕ с основным приложением'
-      : 'Хранилище ИЗОЛИРОВАНО от основного приложения'
-  })()
+  } catch (e) {
+    document.getElementById('dbs').textContent = 'список недоступен'
+  }
+
+  document.getElementById('verdict').textContent = isolationVerdict({ selfStandalone, markerRaw }).text
 </script>
 </body>
 </html>
