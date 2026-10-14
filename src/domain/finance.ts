@@ -114,9 +114,12 @@ function checkAmount(amount: number) {
   if (!Number.isInteger(amount) || amount <= 0 || amount > MAX_AMOUNT) throw new Error('Недопустимая сумма')
 }
 
+/** Комментарий — одна строка: переносы и повторные пробелы схлопываются (строка «Траты» в Markdown). */
+const cleanNote = (note?: string) => note?.replace(/\s+/g, ' ').trim()
+
 export function createTransaction(input: TransactionInput, now: string): Transaction {
   checkAmount(input.amount)
-  const note = input.note?.trim()
+  const note = cleanNote(input.note)
   return {
     id: crypto.randomUUID(),
     day: input.day,
@@ -135,7 +138,7 @@ export function updateTransaction(tx: Transaction, patch: TransactionPatch, now:
   if (patch.amount !== undefined) checkAmount(patch.amount)
   const defined = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))
   const next: Transaction = { ...tx, ...defined, updatedAt: now }
-  const note = next.note?.trim()
+  const note = cleanNote(next.note)
   if (note) next.note = note
   else delete next.note
   return next
@@ -210,12 +213,17 @@ export function monthSummary(txs: Transaction[], cats: FinanceCategory[], month:
   }
 }
 
-export function dayTotals(txs: Transaction[], day: string): { income: number; expense: number; count: number } {
+export function dayTotals(
+  txs: Transaction[],
+  day: string,
+): { income: number; expense: number; count: number; expenseCount: number } {
   const ofDay = liveTransactions(txs).filter((t) => t.day === day)
+  const expenses = ofDay.filter((t) => t.kind === 'expense')
   return {
     income: sum(ofDay.filter((t) => t.kind === 'income')),
-    expense: sum(ofDay.filter((t) => t.kind === 'expense')),
+    expense: sum(expenses),
     count: ofDay.length,
+    expenseCount: expenses.length,
   }
 }
 
@@ -232,4 +240,48 @@ export function categoriesByUse(
     if (t.kind === kind && t.day >= from && t.day <= today) uses.set(t.categoryKey, (uses.get(t.categoryKey) ?? 0) + 1)
   }
   return activeCategories(cats, kind).sort((a, b) => (uses.get(b.key) ?? 0) - (uses.get(a.key) ?? 0))
+}
+
+/** Доли уровней в процентах: целые, в сумме 100 (метод наибольшего остатка); нет трат — нули. */
+export function importanceShares(byImportance: Record<Importance, number>): Record<Importance, number> {
+  const result: Record<Importance, number> = { need: 0, useful: 0, optional: 0 }
+  const total = IMPORTANCES.reduce((s, i) => s + byImportance[i], 0)
+  if (total <= 0) return result
+  const exact = IMPORTANCES.map((i) => (byImportance[i] / total) * 100)
+  IMPORTANCES.forEach((i, k) => (result[i] = Math.floor(exact[k])))
+  let left = 100 - IMPORTANCES.reduce((s, i) => s + result[i], 0)
+  const byRemainder = IMPORTANCES.map((i, k) => ({ i, r: exact[k] - Math.floor(exact[k]) })).sort((a, b) => b.r - a.r)
+  for (const { i } of byRemainder) {
+    if (left <= 0) break
+    result[i]++
+    left--
+  }
+  return result
+}
+
+export interface DayGroup {
+  day: string
+  expense: number
+  income: number
+  items: Transaction[]
+}
+
+/** Живые операции месяца по дням: новые дни сверху, внутри дня — последние добавленные сверху. */
+export function groupByDay(txs: Transaction[], month: string): DayGroup[] {
+  const map = new Map<string, DayGroup>()
+  for (const t of liveTransactions(txs)) {
+    if (monthOf(t.day) !== month) continue
+    const g = map.get(t.day) ?? { day: t.day, expense: 0, income: 0, items: [] }
+    g[t.kind] += t.amount
+    g.items.push(t)
+    map.set(t.day, g)
+  }
+  const groups = [...map.values()].sort((a, b) => b.day.localeCompare(a.day))
+  for (const g of groups) g.items.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+  return groups
+}
+
+/** Следующий уровень важности по кругу — тап по метке в «Настройках». */
+export function nextImportance(i: Importance): Importance {
+  return IMPORTANCES[(IMPORTANCES.indexOf(i) + 1) % IMPORTANCES.length]
 }

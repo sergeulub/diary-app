@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_CATEGORIES, activeCategories, categoriesByUse, createCategory, createTransaction, dayTotals,
-  deleteTransaction, monthSummary, moveCategory, setCategoryArchived, updateCategory, updateTransaction,
+  deleteTransaction, groupByDay, importanceShares, monthSummary, moveCategory, nextImportance, setCategoryArchived,
+  updateCategory, updateTransaction,
 } from './finance'
 import { SEED_TIME } from './metrics'
 import { T0, txRec } from './testFixtures'
@@ -130,8 +131,8 @@ describe('итоги', () => {
     expect(monthSummary([txRec('2026-11-02', { amount: 100 })], cats, '2026-11').saved).toBe(-100)
   })
   it('dayTotals — живые операции дня', () => {
-    expect(dayTotals(txs, '2026-11-02')).toEqual({ income: 0, expense: 125000, count: 2 })
-    expect(dayTotals(txs, '2026-11-04')).toEqual({ income: 0, expense: 0, count: 0 })
+    expect(dayTotals(txs, '2026-11-02')).toEqual({ income: 0, expense: 125000, count: 2, expenseCount: 2 })
+    expect(dayTotals(txs, '2026-11-04')).toEqual({ income: 0, expense: 0, count: 0, expenseCount: 0 })
   })
 })
 
@@ -149,5 +150,31 @@ describe('categoriesByUse', () => {
     const keys = categoriesByUse(txs, cats, 'expense', '2026-11-02').map((c) => c.key)
     expect(keys.slice(0, 4)).toEqual(['cafe', 'transport', 'groceries', 'housing'])
     expect(keys).toHaveLength(11)
+  })
+})
+
+describe('для экранов', () => {
+  it('importanceShares: целые проценты в сумме 100; нет трат — нули', () => {
+    expect(importanceShares({ need: 31200, useful: 12640, optional: 8500 })).toEqual({ need: 60, useful: 24, optional: 16 })
+    expect(importanceShares({ need: 1, useful: 1, optional: 1 })).toEqual({ need: 34, useful: 33, optional: 33 })
+    expect(importanceShares({ need: 0, useful: 0, optional: 0 })).toEqual({ need: 0, useful: 0, optional: 0 })
+  })
+  it('groupByDay: живые операции месяца, новые дни сверху, внутри — последние добавленные сверху', () => {
+    const a = txRec('2026-11-02', { amount: 100, createdAt: '2026-11-02T10:00:00.000+03:00' })
+    const b = txRec('2026-11-02', { amount: 200, createdAt: '2026-11-02T12:00:00.000+03:00' })
+    const c = txRec('2026-11-03', { kind: 'income', categoryKey: 'salary', amount: 5000 })
+    const gone = txRec('2026-11-04', { deletedAt: NOW })
+    const other = txRec('2026-10-31')
+    const groups = groupByDay([a, b, c, gone, other], '2026-11')
+    expect(groups.map((g) => [g.day, g.expense, g.income])).toEqual([['2026-11-03', 0, 5000], ['2026-11-02', 300, 0]])
+    expect(groups[1].items.map((t) => t.id)).toEqual([b.id, a.id])
+  })
+  it('nextImportance — по кругу', () => {
+    expect([nextImportance('need'), nextImportance('useful'), nextImportance('optional')]).toEqual(['useful', 'optional', 'need'])
+  })
+  it('комментарий операции — в одну строку', () => {
+    const t = createTransaction({ kind: 'expense', amount: 100, categoryKey: 'cafe', day: '2026-11-02', note: ' кофе\nс  Машей ' }, NOW)
+    expect(t.note).toBe('кофе с Машей')
+    expect(updateTransaction(t, { note: 'обед\r\nс коллегами' }, NOW).note).toBe('обед с коллегами')
   })
 })

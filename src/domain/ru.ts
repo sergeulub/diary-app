@@ -1,4 +1,4 @@
-import { pad, parseDay } from './dates'
+import { addDays, pad, parseDay } from './dates'
 
 const WEEKDAYS = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота']
 const MONTHS = [
@@ -45,4 +45,13 @@ export function monthName(month: string): string {
 export function formatDateTime(iso: string): string {
   const d = new Date(iso)
   return `${d.getDate()} ${MONTHS_GENITIVE[d.getMonth()]} ${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/** Заголовок дня в списке операций: «Сегодня, 18 ноября», «Вчера, 17 ноября», иначе «Понедельник, 16 ноября». */
+export function dayGroupTitle(day: string, today: string): string {
+  const d = parseDay(day)
+  const date = `${d.getDate()} ${MONTHS_GENITIVE[d.getMonth()]}`
+  if (day === today) return `Сегодня, ${date}`
+  if (day === addDays(today, -1)) return `Вчера, ${date}`
+  return formatDayTitle(day)
 }

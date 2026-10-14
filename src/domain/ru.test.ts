@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { formatDateTime, formatDayTitle, monthName, monthTitle, plural, weekdayName } from './ru'
+import { dayGroupTitle, formatDateTime, formatDayTitle, monthName, monthTitle, plural, weekdayName } from './ru'
+
+describe('dayGroupTitle', () => {
+  it('сегодня, вчера, иначе день недели', () => {
+    expect(dayGroupTitle('2026-11-18', '2026-11-18')).toBe('Сегодня, 18 ноября')
+    expect(dayGroupTitle('2026-11-17', '2026-11-18')).toBe('Вчера, 17 ноября')
+    expect(dayGroupTitle('2026-11-16', '2026-11-18')).toBe('Понедельник, 16 ноября')
+  })
+})
 
 const DAYS: [string, string, string] = ['день', 'дня', 'дней']
 

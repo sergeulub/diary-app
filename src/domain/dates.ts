@@ -32,3 +32,13 @@ export function isLater(a: string, b: string): boolean {
 
 /** Месяц дня: 2026-11-05 → 2026-11. */
 export const monthOf = (day: string) => day.slice(0, 7)
+
+/** 2026-11 + 2 → 2027-01. */
+export function addMonths(month: string, n: number): string {
+  const [y, m] = month.split('-').map(Number)
+  const total = y * 12 + (m - 1) + n
+  return `${Math.floor(total / 12)}-${pad((total % 12) + 1)}`
+}
+
+/** Границы месяца для выборки по дням: с 01 по 31 (строки сравниваются, несуществующая дата не мешает). */
+export const monthRange = (month: string): [string, string] => [`${month}-01`, `${month}-31`]

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_CATEGORIES } from './finance'
 import {
-  allowedAggregates, createGoal, deleteGoal, formatGoalValue, goalProgress, goalsOfMonth, isGoalTarget, moveGoal,
-  updateGoal, type ProgressData,
+  EMPTY_TARGET_FORM, allowedAggregates, createGoal, deleteGoal, formFromTarget, formatGoalValue, goalDetail,
+  goalProgress, goalsOfMonth, isGoalTarget, moveGoal, progressPercent, targetFromForm, updateGoal,
+  type GoalProgress, type ProgressData,
 } from './goals'
 import { DEFAULT_METRICS } from './metrics'
 import { T0, dayRec, goalRec, txRec } from './testFixtures'
@@ -157,5 +158,68 @@ describe('formatGoalValue', () => {
     [{ kind: 'metric', metricKey: 'mood', aggregate: 'avg', op: 'ge', value: 0 }, null, 'нет данных'],
   ])('%j, %s → «%s»', (target, value, text) => {
     expect(formatGoalValue(target, value, defs)).toBe(text)
+  })
+})
+
+describe('подписи прогресса', () => {
+  const p = (value: number | null, target: number, remaining: number | null, state: GoalProgress['state']): GoalProgress =>
+    ({ value, target, remaining, state })
+  const fin = (measure: 'expense' | 'saved', op: 'le' | 'ge', value: number) =>
+    goalRec('2026-11', { target: { kind: 'finance', measure, op, value } })
+  const met = (metricKey: string, aggregate: 'count' | 'sum' | 'avg', value: number) =>
+    goalRec('2026-11', { target: { kind: 'metric', metricKey, aggregate, op: 'ge', value } })
+
+  it('progressPercent: 0–100, без деления на ноль и отрицательных', () => {
+    expect(progressPercent(p(560000, 600000, 40000, 'within'))).toBe(93)
+    expect(progressPercent(p(3266000, 3000000, 0, 'done'))).toBe(100)
+    expect(progressPercent(p(-5000, 3000000, 3005000, 'progress'))).toBe(0)
+    expect(progressPercent(p(null, 3.5, null, 'progress'))).toBe(0)
+    expect(progressPercent(p(5, 0, 0, 'done'))).toBe(100)
+  })
+  it('goalDetail по состояниям', () => {
+    expect(goalDetail(fin('expense', 'le', 600000), p(560000, 600000, 40000, 'within'), defs)).toBe('5 600 из 6 000 ₽ · можно ещё 400 ₽')
+    expect(goalDetail(fin('expense', 'le', 600000), p(620000, 600000, -20000, 'over'), defs)).toBe('6 200 из 6 000 ₽ · перерасход 200 ₽')
+    expect(goalDetail(fin('saved', 'ge', 3000000), p(3266000, 3000000, 0, 'done'), defs)).toBe('32 660 из 30 000 ₽')
+    expect(goalDetail(met('m1', 'count', 12), p(7, 12, 5, 'progress'), defs)).toBe('7 из 12 дней · осталось 5')
+    expect(goalDetail(met('m1', 'count', 12), p(7, 12, 5, 'missed'), defs)).toBe('7 из 12 дней')
+    expect(goalDetail(met('m2', 'sum', 600), p(75, 600, 525, 'progress'), defs)).toBe('75 из 600 мин · осталось 525 мин')
+    expect(goalDetail(met('mood', 'avg', 3.5), p(null, 3.5, null, 'progress'), defs)).toBe('Пока нет данных')
+    expect(goalDetail(goalRec('2026-11'), null, defs)).toBe('Без измерения — сверит Claude по записям дней')
+  })
+})
+
+describe('форма измерения цели', () => {
+  const form = (patch: Partial<typeof EMPTY_TARGET_FORM>) => ({ ...EMPTY_TARGET_FORM, ...patch })
+
+  it('траты по категории, по важности; «отложено» без фильтра; доход без фильтра важности', () => {
+    expect(targetFromForm(form({ filter: 'cat:cafe', value: '6 000' }))).toEqual(
+      { kind: 'finance', measure: 'expense', filter: { categoryKey: 'cafe' }, op: 'le', value: 600000 })
+    expect(targetFromForm(form({ filter: 'imp:optional', value: '10000' }))).toEqual(
+      { kind: 'finance', measure: 'expense', filter: { importance: 'optional' }, op: 'le', value: 1000000 })
+    expect(targetFromForm(form({ measure: 'saved', filter: 'cat:cafe', op: 'ge', value: '30 000' }))).toEqual(
+      { kind: 'finance', measure: 'saved', op: 'ge', value: 3000000 })
+    expect(targetFromForm(form({ measure: 'income', filter: 'imp:need', op: 'ge', value: '1' }))).toEqual(
+      { kind: 'finance', measure: 'income', op: 'ge', value: 100 })
+  })
+  it('метрика: число с запятой', () => {
+    expect(targetFromForm(form({ measure: 'metric', metricKey: 'mood', aggregate: 'avg', op: 'ge', value: '3,5' }))).toEqual(
+      { kind: 'metric', metricKey: 'mood', aggregate: 'avg', op: 'ge', value: 3.5 })
+  })
+  it('ошибки с текстом для пользователя', () => {
+    expect(() => targetFromForm(form({ value: '' }))).toThrow('Введите сумму, например 1 250 или 99,90')
+    expect(() => targetFromForm(form({ measure: 'metric', value: '12' }))).toThrow('Выберите привычку или метрику')
+    expect(() => targetFromForm(form({ measure: 'metric', metricKey: 'm1', value: 'много' }))).toThrow('Введите число, например 12')
+    expect(() => targetFromForm(form({ measure: 'metric', metricKey: 'm1', value: '-1' }))).toThrow('Введите число, например 12')
+  })
+  it('formFromTarget → targetFromForm возвращает то же измерение', () => {
+    const targets: GoalTarget[] = [
+      { kind: 'finance', measure: 'expense', filter: { categoryKey: 'cafe' }, op: 'le', value: 600050 },
+      { kind: 'finance', measure: 'expense', filter: { importance: 'need' }, op: 'le', value: 100000 },
+      { kind: 'finance', measure: 'saved', op: 'ge', value: 3000000 },
+      { kind: 'metric', metricKey: 'm2', aggregate: 'sum', op: 'ge', value: 600 },
+      { kind: 'metric', metricKey: 'mood', aggregate: 'avg', op: 'ge', value: 3.5 },
+    ]
+    for (const t of targets) expect(targetFromForm(formFromTarget(t))).toEqual(t)
+    expect(formFromTarget(undefined)).toEqual(EMPTY_TARGET_FORM)
   })
 })
