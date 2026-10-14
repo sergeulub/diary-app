@@ -1,4 +1,4 @@
-import type { DayRecord, Transaction } from './types'
+import type { DayRecord, Goal, Transaction } from './types'
 
 export const T0 = '2026-10-01T22:00:00.000+03:00'
 
@@ -12,6 +12,14 @@ let seq = 0
 export function txRec(day: string, patch: Partial<Transaction> = {}): Transaction {
   return {
     id: `tx-${++seq}`, day, kind: 'expense', amount: 10000, categoryKey: 'groceries',
+    createdAt: T0, updatedAt: T0, deletedAt: null, ...patch,
+  }
+}
+
+/** Цель без измерения, сфера «Другое». */
+export function goalRec(month: string, patch: Partial<Goal> = {}): Goal {
+  return {
+    id: `goal-${++seq}`, month, text: 'Цель', area: 'other', order: 1,
     createdAt: T0, updatedAt: T0, deletedAt: null, ...patch,
   }
 }
