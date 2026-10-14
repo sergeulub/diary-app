@@ -42,3 +42,10 @@ export function addMonths(month: string, n: number): string {
 
 /** Границы месяца для выборки по дням: с 01 по 31 (строки сравниваются, несуществующая дата не мешает). */
 export const monthRange = (month: string): [string, string] => [`${month}-01`, `${month}-31`]
+
+/** Сколько месяцев от from до to: 2026-11 → 2027-01 = 2. */
+export function monthDiff(from: string, to: string): number {
+  const [fy, fm] = from.split('-').map(Number)
+  const [ty, tm] = to.split('-').map(Number)
+  return (ty - fy) * 12 + (tm - fm)
+}

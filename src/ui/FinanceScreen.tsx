@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
 import { getFinanceCategories, listTransactions } from '../db/diary'
-import { monthOf, monthRange } from '../domain/dates'
+import { addMonths, monthDiff, monthOf, monthRange } from '../domain/dates'
 import {
   IMPORTANCES, IMPORTANCE_LABELS, categoryOf, groupByDay, importanceShares, monthSummary,
 } from '../domain/finance'
@@ -18,7 +18,11 @@ const box = 'flex flex-col gap-3 rounded-[20px] border border-line bg-surface p-
 
 export default function FinanceScreen({ meta }: { meta: Meta }) {
   const today = useLogicalToday(meta.boundaryHour)
-  const [month, setMonth] = useState(() => monthOf(today))
+  // месяц хранится сдвигом от текущего: открытое из памяти 1-го числа приложение сразу показывает новый месяц
+  const [offset, setOffset] = useState(0)
+  const current = monthOf(today)
+  const month = addMonths(current, offset)
+  const setMonth = (m: string) => setOffset(monthDiff(current, m))
   const [sheet, setSheet] = useState<Transaction | 'new' | null>(null)
   const [allCats, setAllCats] = useState(false)
   const [from, to] = monthRange(month)
@@ -35,7 +39,7 @@ export default function FinanceScreen({ meta }: { meta: Meta }) {
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-3.5 px-5 pt-[max(28px,env(safe-area-inset-top))] pb-28">
-      <MonthHeader overline="Финансы" month={month} onChange={setMonth} max={monthOf(today)} />
+      <MonthHeader overline="Финансы" month={month} onChange={setMonth} max={current} />
 
       <section className={box}>
         <div className="grid grid-cols-3 gap-2">

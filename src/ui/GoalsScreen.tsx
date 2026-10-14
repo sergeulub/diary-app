@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
 import { getFinanceCategories, getMetrics, listDays, listGoals, listTransactions } from '../db/diary'
-import { monthOf, monthRange } from '../domain/dates'
+import { addMonths, monthDiff, monthOf, monthRange } from '../domain/dates'
 import {
   AREA_LABELS, GOAL_STATE_LABELS, goalDetail, goalProgress, goalsOfMonth, progressPercent,
   type GoalState, type ProgressData,
@@ -29,7 +29,11 @@ const BAR: Record<GoalState, string> = {
 
 export default function GoalsScreen({ meta }: { meta: Meta }) {
   const today = useLogicalToday(meta.boundaryHour)
-  const [month, setMonth] = useState(() => monthOf(today))
+  // месяц хранится сдвигом от текущего: открытое из памяти 1-го числа приложение сразу показывает новый месяц
+  const [offset, setOffset] = useState(0)
+  const current = monthOf(today)
+  const month = addMonths(current, offset)
+  const setMonth = (m: string) => setOffset(monthDiff(current, m))
   const [sheet, setSheet] = useState<Goal | 'new' | null>(null)
   const [from, to] = monthRange(month)
   const goals = useLiveQuery(() => listGoals(month), [month])

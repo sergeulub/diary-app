@@ -1,11 +1,16 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { addDays, addMonths, isLater, isoWithOffset, monthOf, monthRange, parseDay } from './dates'
+import { addDays, addMonths, isLater, isoWithOffset, monthDiff, monthOf, monthRange, parseDay } from './dates'
 
 describe('месяцы', () => {
   it('addMonths переходит через год в обе стороны', () => {
     expect(addMonths('2026-11', 2)).toBe('2027-01')
     expect(addMonths('2026-01', -1)).toBe('2025-12')
     expect(addMonths('2026-05', 0)).toBe('2026-05')
+  })
+  it('monthDiff — сколько месяцев от первого до второго', () => {
+    expect(monthDiff('2026-11', '2027-01')).toBe(2)
+    expect(monthDiff('2026-01', '2025-12')).toBe(-1)
+    expect(monthDiff('2026-05', '2026-05')).toBe(0)
   })
   it('monthRange — с 01 по 31 включительно', () => {
     expect(monthRange('2026-02')).toEqual(['2026-02-01', '2026-02-31'])

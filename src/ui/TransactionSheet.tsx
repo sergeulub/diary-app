@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { getFinanceCategories, listTransactions, saveTransaction } from '../db/diary'
 import { addDays } from '../domain/dates'
 import {
@@ -28,12 +28,26 @@ export default function TransactionSheet({ initial, today, onClose }: {
   const [note, setNote] = useState(initial?.note ?? '')
   const [noteOpen, setNoteOpen] = useState(Boolean(initial?.note))
   const [error, setError] = useState<string | null>(null)
+  const busy = useRef(false)
   const cats = useLiveQuery(getFinanceCategories)
   const recent = useLiveQuery(() => listTransactions(addDays(today, -89), today), [today])
   if (!cats || !recent) return null
   const list = categoriesByUse(recent, cats, kind, today)
 
-  async function save(categoryKey: string) {
+  /** Одна запись за раз: быстрый двойной тап не создаёт вторую операцию. */
+  async function write(tx: Transaction, failed: string) {
+    if (busy.current) return
+    busy.current = true
+    try {
+      await saveTransaction(tx)
+      onClose()
+    } catch (e) {
+      busy.current = false
+      setError(`${failed}: ${errorText(e)}`)
+    }
+  }
+
+  function save(categoryKey: string) {
     let value: number
     try {
       value = parseAmount(amount)
@@ -44,22 +58,12 @@ export default function TransactionSheet({ initial, today, onClose }: {
     const tx = initial
       ? updateTransaction(initial, { amount: value, categoryKey, day, note }, now())
       : createTransaction({ kind, amount: value, categoryKey, day, note }, now())
-    try {
-      await saveTransaction(tx)
-      onClose()
-    } catch (e) {
-      setError(`Не сохранилось: ${errorText(e)}`)
-    }
+    void write(tx, 'Не сохранилось')
   }
 
-  async function remove() {
+  function remove() {
     if (!initial || !window.confirm('Удалить операцию?')) return
-    try {
-      await saveTransaction(deleteTransaction(initial, now()))
-      onClose()
-    } catch (e) {
-      setError(`Не удалилось: ${errorText(e)}`)
-    }
+    void write(deleteTransaction(initial, now()), 'Не удалилось')
   }
 
   const side = 'min-h-[44px] w-24 text-[16px] text-accent'
@@ -73,7 +77,7 @@ export default function TransactionSheet({ initial, today, onClose }: {
           <Segmented label="Вид операции" options={KINDS} value={kind} onChange={setKind} className="w-44" />
         )}
         {initial ? (
-          <button type="button" onClick={() => void save(initial.categoryKey)} className={`${side} text-right font-semibold`}>
+          <button type="button" onClick={() => save(initial.categoryKey)} className={`${side} text-right font-semibold`}>
             Сохранить
           </button>
         ) : (
@@ -104,7 +108,7 @@ export default function TransactionSheet({ initial, today, onClose }: {
           {dayGroupTitle(day, today)}
           <input
             type="date" value={day} max={today} aria-label="День операции"
-            onChange={(e) => e.target.value && setDay(e.target.value)} className="absolute inset-0 opacity-0"
+            onChange={(e) => e.target.value && setDay(e.target.value)} className="absolute inset-0 text-[16px] opacity-0"
           />
         </label>
         {!noteOpen && (
@@ -133,7 +137,7 @@ export default function TransactionSheet({ initial, today, onClose }: {
             const current = initial?.categoryKey === c.key
             return (
               <button
-                key={c.key} type="button" aria-pressed={current} onClick={() => void save(c.key)}
+                key={c.key} type="button" aria-pressed={current} onClick={() => save(c.key)}
                 className={`flex min-h-[58px] flex-col items-start justify-center gap-1 rounded-[14px] border bg-surface px-2.5 py-2 text-left text-[14px] leading-tight ${
                   current ? 'border-accent ring-2 ring-accent' : 'border-line'
                 }`}
@@ -154,7 +158,7 @@ export default function TransactionSheet({ initial, today, onClose }: {
       )}
       {initial && (
         <button
-          type="button" onClick={() => void remove()}
+          type="button" onClick={remove}
           className="mt-2 min-h-[48px] rounded-[14px] border border-danger text-[16px] font-semibold text-danger"
         >
           Удалить операцию

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { saveGoals } from '../db/diary'
 import { IMPORTANCES, IMPORTANCE_LABELS, activeCategories } from '../domain/finance'
 import {
@@ -37,6 +37,7 @@ export default function GoalSheet({ initial, month, goals, data, today, onClose 
   const [measured, setMeasured] = useState(Boolean(initial?.target))
   const [form, setForm] = useState<TargetForm>(() => formFromTarget(initial?.target))
   const [error, setError] = useState<string | null>(null)
+  const busy = useRef(false)
   const set = (patch: Partial<TargetForm>) => {
     setForm((f) => ({ ...f, ...patch }))
     setError(null)
@@ -85,6 +86,9 @@ export default function GoalSheet({ initial, month, goals, data, today, onClose 
         return
       }
     }
+    // двойной тап по «Сохранить» не создаёт вторую цель
+    if (busy.current) return
+    busy.current = true
     try {
       const goal = initial
         ? updateGoal(initial, { text, area, target }, now())
@@ -92,6 +96,7 @@ export default function GoalSheet({ initial, month, goals, data, today, onClose 
       await saveGoals([goal])
       onClose()
     } catch (e) {
+      busy.current = false
       setError(`Не сохранилось: ${errorText(e)}`)
     }
   }

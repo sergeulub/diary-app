@@ -98,6 +98,8 @@ export function primeKeyboard() {
   el.setAttribute('aria-hidden', 'true')
   el.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;font-size:16px'
   document.body.appendChild(el)
+  // убираем, когда фокус ушёл в поле суммы; таймер — если лист так и не открылся
+  el.addEventListener('blur', () => el.remove(), { once: true })
   el.focus()
-  window.setTimeout(() => el.remove(), 1000)
+  window.setTimeout(() => el.remove(), 5000)
 }
