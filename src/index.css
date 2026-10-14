@@ -12,6 +12,9 @@
   --accent-ink: #FFFFFF;
   --card-shadow: 0 1px 0 rgba(60, 40, 20, 0.04), 0 8px 20px rgba(60, 40, 20, 0.07);
   --danger: #A4472F;
+  --imp-need: #5A6B36;
+  --imp-useful: #A3B677;
+  --imp-optional: #D9925F;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -24,6 +27,9 @@
     --accent-ink: #181A15;
     --card-shadow: none;
     --danger: #E08A6E;
+    --imp-need: #B6C78C;
+    --imp-useful: #6E7F4B;
+    --imp-optional: #D9936D;
   }
 }
 
@@ -36,6 +42,9 @@
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
   --color-danger: var(--danger);
+  --color-imp-need: var(--imp-need);
+  --color-imp-useful: var(--imp-useful);
+  --color-imp-optional: var(--imp-optional);
   --shadow-card: var(--card-shadow);
   --font-serif: "Lora", Georgia, serif;
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;

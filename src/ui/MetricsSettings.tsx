@@ -13,7 +13,7 @@ const now = () => isoWithOffset(new Date())
 const TYPES = Object.keys(METRIC_TYPE_NAMES) as MetricType[]
 const field = 'min-h-[44px] rounded-[14px] border border-line bg-bg px-3.5 text-[16px] text-ink outline-none'
 
-function IconButton({ label, disabled, onClick, children }: { label: string; disabled?: boolean; onClick: () => void; children: ReactNode }) {
+export function IconButton({ label, disabled, onClick, children }: { label: string; disabled?: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
       type="button" aria-label={label} title={label} disabled={disabled} onClick={onClick}
