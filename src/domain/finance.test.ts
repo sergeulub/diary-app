@@ -87,6 +87,11 @@ describe('операции', () => {
     expect(u).toMatchObject({ id: t.id, amount: 30000, day: '2026-11-01', createdAt: T0, updatedAt: NOW })
     expect('note' in u).toBe(false)
   })
+  it('updateTransaction: явный undefined в патче не затирает поля', () => {
+    const t = txRec('2026-11-02', { amount: 45000, note: 'кофе' })
+    const u = updateTransaction(t, { amount: undefined, day: undefined, categoryKey: undefined, note: undefined }, NOW)
+    expect(u).toMatchObject({ amount: 45000, day: '2026-11-02', categoryKey: 'groceries', note: 'кофе', updatedAt: NOW })
+  })
   it('deleteTransaction — мягкое удаление', () => {
     expect(deleteTransaction(txRec('2026-11-02'), NOW)).toMatchObject({ deletedAt: NOW, updatedAt: NOW })
   })

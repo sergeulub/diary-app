@@ -130,9 +130,11 @@ export function createTransaction(input: TransactionInput, now: string): Transac
   }
 }
 
+/** Поле патча со значением undefined не меняется; пустой комментарий удаляет его. */
 export function updateTransaction(tx: Transaction, patch: TransactionPatch, now: string): Transaction {
   if (patch.amount !== undefined) checkAmount(patch.amount)
-  const next: Transaction = { ...tx, ...patch, updatedAt: now }
+  const defined = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))
+  const next: Transaction = { ...tx, ...defined, updatedAt: now }
   const note = next.note?.trim()
   if (note) next.note = note
   else delete next.note

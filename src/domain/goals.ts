@@ -163,12 +163,16 @@ function measure(month: string, t: GoalTarget, data: ProgressData): number | nul
   return numbers.length ? total / numbers.length : null
 }
 
-/** today — ГГГГ-ММ-ДД; месяц цели закончился, если today в более позднем месяце. Цель без измерения — null. */
+/**
+ * today — ГГГГ-ММ-ДД; месяц цели закончился, если today в более позднем месяце. Цель без измерения — null.
+ * Нет данных (среднее без единого значения) — «в процессе», после конца месяца — «не выполнено».
+ */
 export function goalProgress(goal: Goal, data: ProgressData, today: string): GoalProgress | null {
   if (!goal.target) return null
   const value = measure(goal.month, goal.target, data)
   const target = goal.target.value
   const ended = monthOf(today) > goal.month
+  if (value === null) return { value, target, remaining: null, state: ended ? 'missed' : 'progress' }
   if (goal.target.op === 'ge') {
     const done = value !== null && value >= target
     return {

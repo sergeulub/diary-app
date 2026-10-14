@@ -141,6 +141,11 @@ describe('goalProgress', () => {
     expect(goalProgress(mood, data({ days }), '2026-11-03')).toEqual({ value: 3.5, target: 3.5, remaining: 0, state: 'done' })
     expect(goalProgress(mood, data(), '2026-11-03')).toEqual({ value: null, target: 3.5, remaining: null, state: 'progress' })
   })
+  it('≤ без данных: в течение месяца — «в процессе», после — «не выполнено», а не «выполнено»', () => {
+    const boredom = goalRec('2026-11', { target: { kind: 'metric', metricKey: 'boredom', aggregate: 'avg', op: 'le', value: 2 } })
+    expect(goalProgress(boredom, data(), '2026-11-10')?.state).toBe('progress')
+    expect(goalProgress(boredom, data(), '2026-12-01')).toEqual({ value: null, target: 2, remaining: null, state: 'missed' })
+  })
 })
 
 describe('formatGoalValue', () => {
