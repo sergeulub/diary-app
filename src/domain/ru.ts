@@ -36,6 +36,12 @@ export function monthTitle(year: number, month0: number): string {
   return `${MONTHS[month0]} ${year}`
 }
 
+/** 2026-11 → «ноябрь 2026». */
+export function monthName(month: string): string {
+  const [y, m] = month.split('-').map(Number)
+  return monthTitle(y, m - 1).toLowerCase()
+}
+
 export function formatDateTime(iso: string): string {
   const d = new Date(iso)
   return `${d.getDate()} ${MONTHS_GENITIVE[d.getMonth()]} ${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}`

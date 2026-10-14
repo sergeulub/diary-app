@@ -51,3 +51,63 @@ export interface DiarySnapshot {
   entries: EntryRecord[]
   meta: Meta
 }
+
+export type FinanceKind = 'expense' | 'income'
+/** Важность категории трат: необходимо / полезно / можно без этого. */
+export type Importance = 'need' | 'useful' | 'optional'
+
+export interface FinanceCategory {
+  key: string
+  kind: FinanceKind
+  name: string
+  /** Только у категорий трат. */
+  importance?: Importance
+  order: number
+  archived: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Transaction {
+  id: string
+  /** Логический день ГГГГ-ММ-ДД. */
+  day: string
+  /** Совпадает с kind категории. */
+  kind: FinanceKind
+  /** Целые копейки, > 0. */
+  amount: number
+  categoryKey: string
+  note?: string
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export type GoalArea = 'finance' | 'work' | 'study' | 'health' | 'relations' | 'other'
+export type GoalOp = 'le' | 'ge'
+export type GoalAggregate = 'count' | 'sum' | 'avg'
+
+export type GoalTarget =
+  | {
+      kind: 'finance'
+      measure: 'expense' | 'income' | 'saved'
+      /** categoryKey — для expense и income; importance — только для expense; у saved фильтра нет. */
+      filter?: { categoryKey: string } | { importance: Importance }
+      op: GoalOp
+      /** Копейки. */
+      value: number
+    }
+  | { kind: 'metric'; metricKey: string; aggregate: GoalAggregate; op: GoalOp; value: number }
+
+export interface Goal {
+  id: string
+  /** ГГГГ-ММ */
+  month: string
+  text: string
+  area: GoalArea
+  target?: GoalTarget
+  order: number
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}

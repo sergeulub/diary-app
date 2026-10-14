@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { addDays, isLater, isoWithOffset, parseDay } from './dates'
+import { addDays, isLater, isoWithOffset, monthOf, parseDay } from './dates'
 
 const originalTz = process.env.TZ
 afterEach(() => {
@@ -46,5 +46,11 @@ describe('isLater', () => {
   })
   it('одинаковый момент — не позже', () => {
     expect(isLater('2026-10-05T20:30:00.000+00:00', lastExport)).toBe(false)
+  })
+})
+
+describe('monthOf', () => {
+  it('месяц дня', () => {
+    expect(monthOf('2026-11-05')).toBe('2026-11')
   })
 })

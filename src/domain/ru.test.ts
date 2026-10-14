@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { formatDateTime, formatDayTitle, monthTitle, plural, weekdayName } from './ru'
+import { formatDateTime, formatDayTitle, monthName, monthTitle, plural, weekdayName } from './ru'
 
 const DAYS: [string, string, string] = ['день', 'дня', 'дней']
 
@@ -33,5 +33,12 @@ describe('подписи дат', () => {
     process.env.TZ = 'Europe/Moscow'
     expect(formatDateTime('2026-10-06T22:15:00.000+03:00')).toBe('6 октября 2026, 22:15')
     expect(formatDateTime('2026-10-06T19:05:00.000+00:00')).toBe('6 октября 2026, 22:05')
+  })
+})
+
+describe('monthName', () => {
+  it('месяц строчными с годом', () => {
+    expect(monthName('2026-11')).toBe('ноябрь 2026')
+    expect(monthName('2027-01')).toBe('январь 2027')
   })
 })

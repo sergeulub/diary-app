@@ -29,3 +29,6 @@ export function addDays(day: string, n: number): string {
 export function isLater(a: string, b: string): boolean {
   return Date.parse(a) > Date.parse(b)
 }
+
+/** Месяц дня: 2026-11-05 → 2026-11. */
+export const monthOf = (day: string) => day.slice(0, 7)
