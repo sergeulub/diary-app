@@ -1,8 +1,14 @@
 import { strFromU8, unzipSync } from 'fflate'
 import { isLater } from './dates'
 import { FORMAT_VERSION, type Backup } from './exportFormat'
+import { IMPORTANCES } from './finance'
+import { AREAS, isGoalTarget, isMonth } from './goals'
 import { validateMetricValue } from './metrics'
-import type { DayRecord, DiarySnapshot, EntryRecord, FaceKind, Meta, MetricDefinition, MetricType, MetricValue } from './types'
+import { MAX_AMOUNT } from './money'
+import type {
+  DayRecord, DiarySnapshot, EntryRecord, FaceKind, FinanceCategory, FinanceKind, Goal, GoalArea, Importance, Meta,
+  MetricDefinition, MetricType, MetricValue, Transaction,
+} from './types'
 
 /** Ошибка импорта с текстом для пользователя. */
 export class ImportError extends Error {}
@@ -96,6 +102,74 @@ function parseEntry(x: unknown, i: number): EntryRecord {
   }
 }
 
+const KINDS: FinanceKind[] = ['expense', 'income']
+const isDeletedAt = (x: unknown) => x === null || x === undefined || isStamp(x)
+
+function parseCategory(x: unknown, i: number): FinanceCategory {
+  if (
+    !isObj(x) || !isStr(x.key) || !x.key || !KINDS.includes(x.kind as FinanceKind) || !isStr(x.name) ||
+    typeof x.order !== 'number' || !isStamp(x.createdAt) || !isStamp(x.updatedAt) ||
+    (x.kind === 'expense' && !IMPORTANCES.includes(x.importance as Importance))
+  ) {
+    throw new ImportError(`Категория №${i + 1}: ${BAD_FIELDS}`)
+  }
+  return {
+    key: x.key,
+    kind: x.kind as FinanceKind,
+    name: x.name,
+    ...(x.kind === 'expense' ? { importance: x.importance as Importance } : {}),
+    order: x.order,
+    archived: x.archived === true,
+    createdAt: x.createdAt,
+    updatedAt: x.updatedAt,
+  }
+}
+
+function parseTransaction(x: unknown, i: number): Transaction {
+  if (
+    !isObj(x) || !isStr(x.id) || !x.id || !isStr(x.day) || !DAY_RE.test(x.day) || !KINDS.includes(x.kind as FinanceKind) ||
+    typeof x.amount !== 'number' || !Number.isInteger(x.amount) || x.amount <= 0 || x.amount > MAX_AMOUNT ||
+    !isStr(x.categoryKey) || !x.categoryKey || (x.note !== undefined && !isStr(x.note)) ||
+    !isStamp(x.createdAt) || !isStamp(x.updatedAt) || !isDeletedAt(x.deletedAt)
+  ) {
+    throw new ImportError(`Операция №${i + 1}: ${BAD_FIELDS}`)
+  }
+  return {
+    id: x.id,
+    day: x.day,
+    kind: x.kind as FinanceKind,
+    amount: x.amount,
+    categoryKey: x.categoryKey,
+    ...(isStr(x.note) ? { note: x.note } : {}),
+    createdAt: x.createdAt,
+    updatedAt: x.updatedAt,
+    deletedAt: isStamp(x.deletedAt) ? x.deletedAt : null,
+  }
+}
+
+function parseGoal(x: unknown, i: number): Goal {
+  if (
+    !isObj(x) || !isStr(x.id) || !x.id || !isMonth(x.month) || !isStr(x.text) || !AREAS.includes(x.area as GoalArea) ||
+    (x.target !== undefined && !isGoalTarget(x.target)) || typeof x.order !== 'number' ||
+    !isStamp(x.createdAt) || !isStamp(x.updatedAt) || !isDeletedAt(x.deletedAt)
+  ) {
+    throw new ImportError(`Цель №${i + 1}: ${BAD_FIELDS}`)
+  }
+  return {
+    id: x.id,
+    month: x.month,
+    text: x.text,
+    area: x.area as GoalArea,
+    ...(isGoalTarget(x.target) ? { target: x.target } : {}),
+    order: x.order,
+    createdAt: x.createdAt,
+    updatedAt: x.updatedAt,
+    deletedAt: isStamp(x.deletedAt) ? x.deletedAt : null,
+  }
+}
+
+const list = (x: unknown): unknown[] => (Array.isArray(x) ? x : [])
+
 function parseMeta(x: unknown): Meta {
   const m = isObj(x) ? x : {}
   return {
@@ -130,7 +204,10 @@ export function parseImport(json: string): Backup {
     exportedAt: isStr(raw.exportedAt) ? raw.exportedAt : '',
     metricDefinitions,
     days: raw.days.map((d, i) => parseDayRecord(d, i, defs)),
-    entries: Array.isArray(raw.entries) ? raw.entries.map(parseEntry) : [],
+    entries: list(raw.entries).map(parseEntry),
+    financeCategories: list(raw.financeCategories).map(parseCategory),
+    transactions: list(raw.transactions).map(parseTransaction),
+    goals: list(raw.goals).map(parseGoal),
     meta: parseMeta(raw.meta),
   }
 }
@@ -145,6 +222,9 @@ export interface ImportPlan {
   days: MergePart<DayRecord>
   metricDefinitions: MergePart<MetricDefinition>
   entries: MergePart<EntryRecord>
+  financeCategories: MergePart<FinanceCategory>
+  transactions: MergePart<Transaction>
+  goals: MergePart<Goal>
 }
 
 /** Слияние по ключу: нового нет — добавить; в файле свежее `updatedAt` — заменить; иначе оставить своё. */
@@ -163,22 +243,32 @@ function mergeBy<T extends { updatedAt: string }>(current: T[], incoming: T[], k
 }
 
 export function planImport(
-  current: Pick<DiarySnapshot, 'days' | 'metricDefinitions' | 'entries'>,
+  current: Pick<DiarySnapshot, 'days' | 'metricDefinitions' | 'entries' | 'financeCategories' | 'transactions' | 'goals'>,
   incoming: Backup,
 ): ImportPlan {
   return {
     days: mergeBy(current.days, incoming.days, (d) => d.day),
     metricDefinitions: mergeBy(current.metricDefinitions, incoming.metricDefinitions, (d) => d.key),
     entries: mergeBy(current.entries, incoming.entries, (e) => e.id),
+    financeCategories: mergeBy(current.financeCategories, incoming.financeCategories, (c) => c.key),
+    transactions: mergeBy(current.transactions, incoming.transactions, (t) => t.id),
+    goals: mergeBy(current.goals, incoming.goals, (g) => g.id),
   }
 }
 
 export function importSize(plan: ImportPlan): number {
-  return plan.days.put.length + plan.metricDefinitions.put.length + plan.entries.put.length
+  return Object.values(plan).reduce((n, part: MergePart<unknown>) => n + part.put.length, 0)
 }
+
+const describePart = (label: string, p: MergePart<unknown>) =>
+  `${label}: будет добавлено ${p.added}, обновлено ${p.updated}.`
 
 export function describeImport(plan: ImportPlan): string {
   if (importSize(plan) === 0) return 'Нечего импортировать: всё это уже есть в дневнике.'
-  const { days, metricDefinitions: m } = plan
-  return `Дней: будет добавлено ${days.added}, обновлено ${days.updated}. Метрик: будет добавлено ${m.added}, обновлено ${m.updated}.`
+  const parts = [describePart('Дней', plan.days), describePart('Метрик', plan.metricDefinitions)]
+  const extra: [string, MergePart<unknown>][] = [
+    ['Категорий', plan.financeCategories], ['Операций', plan.transactions], ['Целей', plan.goals],
+  ]
+  for (const [label, p] of extra) if (p.put.length) parts.push(describePart(label, p))
+  return parts.join(' ')
 }

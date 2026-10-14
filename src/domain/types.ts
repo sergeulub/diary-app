@@ -49,6 +49,9 @@ export interface DiarySnapshot {
   metricDefinitions: MetricDefinition[]
   days: DayRecord[]
   entries: EntryRecord[]
+  financeCategories: FinanceCategory[]
+  transactions: Transaction[]
+  goals: Goal[]
   meta: Meta
 }
 

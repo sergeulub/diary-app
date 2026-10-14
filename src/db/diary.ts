@@ -126,18 +126,26 @@ export async function saveDay(day: string, patch: DayPatch, now: Date): Promise<
 }
 
 export async function exportSnapshot(): Promise<DiarySnapshot> {
-  return db.transaction('r', [db.days, db.metricDefinitions, db.entries, db.meta], async () => ({
+  const tables = [db.days, db.metricDefinitions, db.entries, db.meta, db.financeCategories, db.transactions, db.goals]
+  return db.transaction('r', tables, async () => ({
     metricDefinitions: await db.metricDefinitions.toArray(),
     days: await db.days.toArray(),
     entries: await db.entries.toArray(),
+    financeCategories: await db.financeCategories.toArray(),
+    transactions: await db.transactions.toArray(),
+    goals: await db.goals.toArray(),
     meta: await getMeta(),
   }))
 }
 
 export async function applyImport(plan: ImportPlan): Promise<void> {
-  await db.transaction('rw', [db.days, db.metricDefinitions, db.entries], async () => {
+  const tables = [db.days, db.metricDefinitions, db.entries, db.financeCategories, db.transactions, db.goals]
+  await db.transaction('rw', tables, async () => {
     await db.days.bulkPut(plan.days.put)
     await db.metricDefinitions.bulkPut(plan.metricDefinitions.put)
     await db.entries.bulkPut(plan.entries.put)
+    await db.financeCategories.bulkPut(plan.financeCategories.put)
+    await db.transactions.bulkPut(plan.transactions.put)
+    await db.goals.bulkPut(plan.goals.put)
   })
 }

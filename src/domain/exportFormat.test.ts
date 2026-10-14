@@ -86,6 +86,9 @@ describe('buildExportZip', () => {
       dayRec('2026-10-06', { metrics: full, updatedAt: '2026-10-06T22:00:00.000+03:00' }),
     ],
     entries: [],
+    financeCategories: [],
+    transactions: [],
+    goals: [],
     meta: { boundaryHour: 6, lastExportAt: null, schemaVersion: 1 },
   }
   const now = new Date(2026, 9, 6, 22, 15)
@@ -98,11 +101,14 @@ describe('buildExportZip', () => {
   it('backup.json — весь дневник с formatVersion и exportedAt со смещением', () => {
     const files = unzipSync(buildExportZip(snapshot, now).bytes)
     const backup = JSON.parse(strFromU8(files['backup.json']))
-    expect(backup.formatVersion).toBe(1)
+    expect(backup.formatVersion).toBe(2)
     expect(backup.exportedAt).toMatch(/^2026-10-06T22:15:00\.000[+-]\d{2}:\d{2}$/)
     expect(backup.days).toEqual(snapshot.days)
     expect(backup.metricDefinitions).toEqual(snapshot.metricDefinitions)
     expect(backup.entries).toEqual([])
+    expect(backup.financeCategories).toEqual([])
+    expect(backup.transactions).toEqual([])
+    expect(backup.goals).toEqual([])
     expect(backup.meta).toEqual(snapshot.meta)
   })
   it('кириллица в .md сохраняется', () => {

@@ -3,7 +3,8 @@ import Dexie from 'dexie'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { isoWithOffset } from '../domain/dates'
 import { buildBackup } from '../domain/exportFormat'
-import { DEFAULT_CATEGORIES } from '../domain/finance'
+import { DEFAULT_CATEGORIES, createTransaction } from '../domain/finance'
+import { createGoal } from '../domain/goals'
 import { parseImport, planImport } from '../domain/importFormat'
 import { DEFAULT_METRICS } from '../domain/metrics'
 import { T0, dayRec, goalRec, txRec } from '../domain/testFixtures'
@@ -96,6 +97,23 @@ describe('экспорт → чистая база → импорт', () => {
     const after = await exportSnapshot()
     expect(after.days).toEqual(before.days)
     expect(after.metricDefinitions).toEqual(before.metricDefinitions)
+  })
+  it('возвращает категории, операции и цели', async () => {
+    const stamp = isoWithOffset(at(5))
+    await saveFinanceCategories([{ ...(await getFinanceCategories())[0], name: 'Еда', updatedAt: stamp }])
+    const tx = createTransaction({ kind: 'expense', amount: 45000, categoryKey: 'cafe', day: '2026-10-05', note: 'кофе' }, stamp)
+    await saveTransaction(tx)
+    const goal = createGoal({
+      month: '2026-11', text: 'Отложить 15 000 ₽', area: 'finance',
+      target: { kind: 'finance', measure: 'saved', op: 'ge', value: 1_500_000 },
+    }, [], stamp)
+    await saveGoals([goal])
+    const backup = parseImport(JSON.stringify(buildBackup(await exportSnapshot(), isoWithOffset(at(6)))))
+    await freshDb()
+    await applyImport(planImport(await exportSnapshot(), backup))
+    expect(await listTransactions('2026-10-01', '2026-10-31')).toEqual([tx])
+    expect(await listGoals('2026-11')).toEqual([goal])
+    expect((await getFinanceCategories()).find((c) => c.key === 'groceries')?.name).toBe('Еда')
   })
 })
 

@@ -6,7 +6,7 @@ import { weekdayName } from './ru'
 import { formatDuration, sleepDuration } from './sleep'
 import type { DayRecord, DiarySnapshot, MetricDefinition, MetricValue } from './types'
 
-export const FORMAT_VERSION = 1
+export const FORMAT_VERSION = 2
 
 export interface Backup extends DiarySnapshot {
   formatVersion: number
@@ -20,6 +20,9 @@ export function buildBackup(s: DiarySnapshot, exportedAt: string): Backup {
     metricDefinitions: s.metricDefinitions,
     days: s.days,
     entries: s.entries,
+    financeCategories: s.financeCategories,
+    transactions: s.transactions,
+    goals: s.goals,
     meta: s.meta,
   }
 }

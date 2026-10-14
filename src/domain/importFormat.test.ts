@@ -3,13 +3,15 @@ import { describe, expect, it } from 'vitest'
 import { buildBackup, buildExportZip } from './exportFormat'
 import { ImportError, describeImport, extractBackupJson, importSize, parseImport, planImport } from './importFormat'
 import { DEFAULT_METRICS, SEED_TIME } from './metrics'
-import { dayRec } from './testFixtures'
+import { DEFAULT_CATEGORIES } from './finance'
+import { dayRec, goalRec, txRec } from './testFixtures'
 import type { DiarySnapshot } from './types'
 
 const meta = { boundaryHour: 6, lastExportAt: null, schemaVersion: 1 }
 const snapshot = (patch: Partial<DiarySnapshot> = {}): DiarySnapshot => ({
-  metricDefinitions: DEFAULT_METRICS, days: [], entries: [], meta, ...patch,
+  metricDefinitions: DEFAULT_METRICS, days: [], entries: [], financeCategories: [], transactions: [], goals: [], meta, ...patch,
 })
+const EMPTY = { days: [], metricDefinitions: [], entries: [], financeCategories: [], transactions: [], goals: [] }
 const json = (s: DiarySnapshot) => JSON.stringify(buildBackup(s, '2026-10-06T22:00:00.000+03:00'))
 
 describe('extractBackupJson', () => {
@@ -38,8 +40,8 @@ describe('parseImport', () => {
     expect(() => parseImport('{"days":[]}')).toThrow(/не похож на бэкап/)
   })
   it('будущая formatVersion отклоняется с просьбой обновиться', () => {
-    expect(() => parseImport(JSON.stringify({ ...JSON.parse(json(snapshot())), formatVersion: 2 }))).toThrow(
-      /более новой версией приложения \(формат 2\)/,
+    expect(() => parseImport(JSON.stringify({ ...JSON.parse(json(snapshot())), formatVersion: 3 }))).toThrow(
+      /более новой версией приложения \(формат 3\)/,
     )
   })
   it('недопустимое значение метрики называет день и метрику', () => {
@@ -106,7 +108,7 @@ describe('экспорт → импорт', () => {
       ],
     })
     const zip = buildExportZip(s, new Date(2026, 9, 6, 22, 15)).bytes
-    const plan = planImport({ days: [], metricDefinitions: [], entries: [] }, parseImport(extractBackupJson(zip)))
+    const plan = planImport(EMPTY, parseImport(extractBackupJson(zip)))
     expect(plan.days.put).toEqual(s.days)
     expect(plan.metricDefinitions.put).toEqual(s.metricDefinitions)
     expect(plan.entries.put).toEqual([])
@@ -135,5 +137,71 @@ describe('completedAt', () => {
   it('неверная метка completedAt отклоняется', () => {
     const bad = dayRec('2026-10-06', { completedAt: 'вчера' })
     expect(() => parseImport(json(snapshot({ days: [bad] })))).toThrow(/День 2026-10-06/)
+  })
+})
+
+describe('бэкап v2: финансы и цели', () => {
+  const cafeGoal = goalRec('2026-11', {
+    area: 'finance', text: 'Кафе ≤ 5 000 ₽',
+    target: { kind: 'finance', measure: 'expense', filter: { categoryKey: 'cafe' }, op: 'le', value: 500000 },
+  })
+  const s = snapshot({
+    financeCategories: DEFAULT_CATEGORIES,
+    transactions: [
+      txRec('2026-11-02', { categoryKey: 'cafe', amount: 45000, note: 'кофе' }),
+      txRec('2026-11-03', { amount: 1000, deletedAt: '2026-11-03T10:00:00.000+03:00' }),
+    ],
+    goals: [cafeGoal],
+  })
+
+  it('экспорт → импорт в пустой дневник возвращает категории, операции (с удалёнными) и цели', () => {
+    const zip = buildExportZip(s, new Date(2026, 10, 3, 22)).bytes
+    const plan = planImport(EMPTY, parseImport(extractBackupJson(zip)))
+    expect(plan.financeCategories.put).toEqual(DEFAULT_CATEGORIES)
+    expect(plan.transactions.put).toEqual(s.transactions)
+    expect(plan.goals.put).toEqual([cafeGoal])
+  })
+  it('файл формата 1 без новых массивов читается с пустыми', () => {
+    const v1 = { ...JSON.parse(json(snapshot())), formatVersion: 1 }
+    delete v1.financeCategories
+    delete v1.transactions
+    delete v1.goals
+    const backup = parseImport(JSON.stringify(v1))
+    expect([backup.financeCategories, backup.transactions, backup.goals]).toEqual([[], [], []])
+  })
+  it.each<[string, Record<string, unknown>]>([
+    ['нулевая сумма', { amount: 0 }],
+    ['дробные копейки', { amount: 10.5 }],
+    ['неверный вид', { kind: 'refund' }],
+    ['неверная дата', { day: '2026-11-31x' }],
+  ])('операция: %s — отказ с номером', (_, patch) => {
+    const raw = JSON.parse(json(snapshot({ transactions: [txRec('2026-11-02')] })))
+    Object.assign(raw.transactions[0], patch)
+    expect(() => parseImport(JSON.stringify(raw))).toThrow('Операция №1: не хватает полей или они неверного типа')
+  })
+  it('категория трат без важности — отказ; у дохода важность отбрасывается', () => {
+    const noImportance = { ...DEFAULT_CATEGORIES[0] }
+    delete noImportance.importance
+    expect(() => parseImport(json(snapshot({ financeCategories: [noImportance] })))).toThrow('Категория №1')
+    const salary = { ...DEFAULT_CATEGORIES.find((c) => c.key === 'salary')!, importance: 'need' as const }
+    expect('importance' in parseImport(json(snapshot({ financeCategories: [salary] }))).financeCategories[0]).toBe(false)
+  })
+  it('цель с неверным измерением или месяцем — отказ', () => {
+    const badTarget = goalRec('2026-11', { target: { kind: 'finance', measure: 'saved', filter: { categoryKey: 'cafe' }, op: 'ge', value: 1 } })
+    expect(() => parseImport(json(snapshot({ goals: [badTarget] })))).toThrow('Цель №1')
+    expect(() => parseImport(json(snapshot({ goals: [goalRec('2026-13')] })))).toThrow('Цель №1')
+  })
+  it('слияние операций по id: свежая правка побеждает; сводка называет операции и цели', () => {
+    const old = txRec('2026-11-02', { amount: 1000, updatedAt: '2026-11-02T10:00:00.000+03:00' })
+    const edited = { ...old, amount: 2000, updatedAt: '2026-11-02T12:00:00.000+03:00' }
+    const plan = planImport(
+      snapshot({ transactions: [old] }),
+      parseImport(json(snapshot({ transactions: [edited, txRec('2026-11-03')], goals: [goalRec('2026-11')] }))),
+    )
+    expect(plan.transactions.put.map((t) => t.amount)).toEqual([2000, 10000])
+    expect(describeImport(plan)).toBe(
+      'Дней: будет добавлено 0, обновлено 0. Метрик: будет добавлено 0, обновлено 0. ' +
+        'Операций: будет добавлено 1, обновлено 1. Целей: будет добавлено 1, обновлено 0.',
+    )
   })
 })
