@@ -3,6 +3,7 @@ import { pad } from '../domain/dates'
 import type { Meta } from '../domain/types'
 import DataSettings from './DataSettings'
 import { Card } from './MetricCards'
+import CategoriesSettings from './CategoriesSettings'
 import MetricsSettings from './MetricsSettings'
 
 const HOURS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
@@ -12,6 +13,7 @@ export default function SettingsScreen({ meta }: { meta: Meta }) {
     <div className="mx-auto flex max-w-md flex-col gap-3.5 px-5 pt-[max(28px,env(safe-area-inset-top))] pb-6">
       <h1 className="font-serif text-[30px] font-semibold">Настройки</h1>
       <MetricsSettings />
+      <CategoriesSettings />
       <Card title="Граница дня">
         <label className="flex items-center justify-between gap-3">
           <span className="text-[15px] text-muted">Записи до этого часа относятся к прошлому дню</span>
