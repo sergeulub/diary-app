@@ -4,6 +4,8 @@ import { getMeta, initDb } from './db/diary'
 import { requestPersistence } from './db/storage'
 import { errorText } from './ui/errors'
 import CalendarScreen from './ui/CalendarScreen'
+import FinanceScreen from './ui/FinanceScreen'
+import GoalsScreen from './ui/GoalsScreen'
 import SettingsScreen from './ui/SettingsScreen'
 import SummaryScreen from './ui/SummaryScreen'
 import TabBar, { type Tab } from './ui/TabBar'
@@ -29,7 +31,9 @@ export default function App() {
   return (
     <div className="flex h-dvh flex-col">
       <main className="min-h-0 flex-1 overflow-y-auto">
-        {tab === 'summary' && <SummaryScreen meta={meta} />}
+        {tab === 'summary' && <SummaryScreen meta={meta} onOpenFinance={() => setTab('finance')} />}
+        {tab === 'finance' && <FinanceScreen meta={meta} />}
+        {tab === 'goals' && <GoalsScreen meta={meta} />}
         {tab === 'calendar' && <CalendarScreen meta={meta} />}
         {tab === 'settings' && <SettingsScreen meta={meta} />}
       </main>
