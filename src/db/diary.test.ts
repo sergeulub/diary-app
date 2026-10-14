@@ -1,12 +1,16 @@
 import 'fake-indexeddb/auto' // до импорта Dexie: подменяет indexedDB в Node
+import Dexie from 'dexie'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { isoWithOffset } from '../domain/dates'
 import { buildBackup } from '../domain/exportFormat'
+import { DEFAULT_CATEGORIES } from '../domain/finance'
 import { parseImport, planImport } from '../domain/importFormat'
 import { DEFAULT_METRICS } from '../domain/metrics'
+import { T0, dayRec, goalRec, txRec } from '../domain/testFixtures'
 import { db } from './database'
 import {
-  applyImport, exportSnapshot, getDay, getMeta, getMetrics, initDb, listDays, listFilledDays, listStreakDays, saveDay, saveMetrics,
+  applyImport, exportSnapshot, getDay, getFinanceCategories, getMeta, getMetrics, initDb, listDays, listFilledDays,
+  listGoals, listStreakDays, listTransactions, saveDay, saveFinanceCategories, saveGoals, saveMetrics, saveTransaction,
   setMeta,
 } from './diary'
 
@@ -23,7 +27,7 @@ beforeEach(freshDb)
 describe('initDb', () => {
   it('засевает четыре метрики и meta по умолчанию', async () => {
     expect((await getMetrics()).map((d) => d.key)).toEqual(['mood', 'boredom', 'sleepStart', 'sleepEnd'])
-    expect(await getMeta()).toEqual({ boundaryHour: 6, lastExportAt: null, schemaVersion: 1 })
+    expect(await getMeta()).toEqual({ boundaryHour: 6, lastExportAt: null, schemaVersion: 2 })
   })
   it('повторный запуск не дублирует и не затирает правки', async () => {
     await saveMetrics([{ ...DEFAULT_METRICS[1], name: 'Тоска' }])
@@ -128,5 +132,52 @@ describe('серия: completedAt', () => {
     await setMeta('boundaryHour', 4)
     await saveDay('2026-10-06', { metrics: all, text: text40 }, new Date(2026, 9, 7, 5, 0))
     expect(await listStreakDays()).toEqual([])
+  })
+})
+
+describe('финансы и цели в базе', () => {
+  it('initDb засевает категории один раз и не затирает правки', async () => {
+    expect(await getFinanceCategories()).toHaveLength(DEFAULT_CATEGORIES.length)
+    await saveFinanceCategories([{ ...DEFAULT_CATEGORIES[0], name: 'Еда' }])
+    await initDb()
+    const cats = await getFinanceCategories()
+    expect(cats).toHaveLength(DEFAULT_CATEGORIES.length)
+    expect(cats.find((c) => c.key === 'groceries')?.name).toBe('Еда')
+  })
+  it('операции: выборка по дням включительно, удалённые остаются в базе', async () => {
+    const a = txRec('2026-10-31')
+    const b = txRec('2026-11-01')
+    const c = txRec('2026-11-30', { deletedAt: T0 })
+    const d = txRec('2026-12-01')
+    for (const t of [a, b, c, d]) await saveTransaction(t)
+    expect((await listTransactions('2026-11-01', '2026-11-30')).map((t) => t.id).sort()).toEqual([b.id, c.id].sort())
+  })
+  it('цели: выборка по месяцу', async () => {
+    const a = goalRec('2026-11')
+    await saveGoals([a, goalRec('2026-12')])
+    expect(await listGoals('2026-11')).toEqual([a])
+  })
+})
+
+describe('апгрейд базы v1 → v2', () => {
+  it('сохраняет дни, метрики и настройки, засевает категории, ставит schemaVersion 2', async () => {
+    await db.delete()
+    const v1 = new Dexie('diary')
+    v1.version(1).stores({ days: 'day, updatedAt', metricDefinitions: 'key', entries: 'id, day, updatedAt', meta: 'key' })
+    await v1.open()
+    const day = dayRec('2026-10-05', { metrics: { mood: 4 }, text: 'До обновления' })
+    await v1.table('days').put(day)
+    await v1.table('metricDefinitions').bulkPut(DEFAULT_METRICS)
+    await v1.table('meta').bulkPut([
+      { key: 'boundaryHour', value: 4 }, { key: 'lastExportAt', value: null }, { key: 'schemaVersion', value: 1 },
+    ])
+    v1.close()
+
+    await db.open()
+    await initDb()
+    expect(await getDay('2026-10-05')).toEqual(day)
+    expect(await getMetrics()).toHaveLength(4)
+    expect(await getMeta()).toEqual({ boundaryHour: 4, lastExportAt: null, schemaVersion: 2 })
+    expect(await getFinanceCategories()).toHaveLength(DEFAULT_CATEGORIES.length)
   })
 })

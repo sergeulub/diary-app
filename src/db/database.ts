@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { DayRecord, EntryRecord, MetricDefinition } from '../domain/types'
+import type { DayRecord, EntryRecord, FinanceCategory, Goal, MetricDefinition, Transaction } from '../domain/types'
 
 export interface MetaRow {
   key: string
@@ -12,6 +12,9 @@ export const db = new Dexie('diary') as Dexie & {
   metricDefinitions: EntityTable<MetricDefinition, 'key'>
   entries: EntityTable<EntryRecord, 'id'>
   meta: EntityTable<MetaRow, 'key'>
+  financeCategories: EntityTable<FinanceCategory, 'key'>
+  transactions: EntityTable<Transaction, 'id'>
+  goals: EntityTable<Goal, 'id'>
 }
 
 // Схема меняется только добавлением db.version(2).stores(...).upgrade(...); версию 1 после релиза не править.
@@ -21,3 +24,12 @@ db.version(1).stores({
   entries: 'id, day, updatedAt',
   meta: 'key',
 })
+
+// Финансы и цели. Новая база получает schemaVersion 2 из DEFAULT_META; существующая — здесь.
+db.version(2)
+  .stores({
+    financeCategories: 'key',
+    transactions: 'id, day, updatedAt',
+    goals: 'id, month, updatedAt',
+  })
+  .upgrade((tx) => tx.table('meta').put({ key: 'schemaVersion', value: 2 }))

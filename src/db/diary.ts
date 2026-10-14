@@ -1,16 +1,20 @@
 import Dexie from 'dexie'
 import { isoWithOffset } from '../domain/dates'
 import type { ImportPlan } from '../domain/importFormat'
+import { DEFAULT_CATEGORIES, sortCategories } from '../domain/finance'
 import { logicalDay } from '../domain/logicalDay'
 import { DEFAULT_METRICS, isDayComplete, isDayFilled, sortMetrics } from '../domain/metrics'
-import type { DayRecord, DiarySnapshot, Meta, MetricDefinition, MetricValue } from '../domain/types'
+import type {
+  DayRecord, DiarySnapshot, FinanceCategory, Goal, Meta, MetricDefinition, MetricValue, Transaction,
+} from '../domain/types'
 import { db } from './database'
 
-const DEFAULT_META: Meta = { boundaryHour: 6, lastExportAt: null, schemaVersion: 1 }
+const DEFAULT_META: Meta = { boundaryHour: 6, lastExportAt: null, schemaVersion: 2 }
 
 export async function initDb(): Promise<void> {
-  await db.transaction('rw', db.metricDefinitions, db.meta, async () => {
+  await db.transaction('rw', db.metricDefinitions, db.meta, db.financeCategories, async () => {
     if ((await db.metricDefinitions.count()) === 0) await db.metricDefinitions.bulkAdd(DEFAULT_METRICS)
+    if ((await db.financeCategories.count()) === 0) await db.financeCategories.bulkAdd(DEFAULT_CATEGORIES)
     const present = new Set((await db.meta.toArray()).map((r) => r.key))
     const missing = Object.entries(DEFAULT_META)
       .filter(([key]) => !present.has(key))
@@ -36,6 +40,32 @@ export async function getMetrics(): Promise<MetricDefinition[]> {
 
 export async function saveMetrics(defs: MetricDefinition[]): Promise<void> {
   await db.metricDefinitions.bulkPut(defs)
+}
+
+export async function getFinanceCategories(): Promise<FinanceCategory[]> {
+  return sortCategories(await db.financeCategories.toArray())
+}
+
+export async function saveFinanceCategories(cats: FinanceCategory[]): Promise<void> {
+  await db.financeCategories.bulkPut(cats)
+}
+
+export async function saveTransaction(tx: Transaction): Promise<void> {
+  await db.transactions.put(tx)
+}
+
+/** Операции с from по to включительно, вместе с удалёнными: отбирает домен. */
+export async function listTransactions(from: string, to: string): Promise<Transaction[]> {
+  return db.transactions.where('day').between(from, to, true, true).toArray()
+}
+
+export async function saveGoals(goals: Goal[]): Promise<void> {
+  await db.goals.bulkPut(goals)
+}
+
+/** Цели месяца вместе с удалёнными: отбирает домен (goalsOfMonth). */
+export async function listGoals(month: string): Promise<Goal[]> {
+  return db.goals.where('month').equals(month).toArray()
 }
 
 export async function getDay(day: string): Promise<DayRecord | undefined> {
