@@ -1,7 +1,7 @@
 import { useState, type ChangeEvent } from 'react'
 import { applyImport, exportSnapshot } from '../db/diary'
 import {
-  ImportError, describeImport, extractBackupJson, importSize, parseImport, planImport, type ImportPlan,
+  ImportError, describeImport, extractArchive, importSize, parseImport, planImport, type ImportPlan,
 } from '../domain/importFormat'
 import { formatDateTime } from '../domain/ru'
 import type { Meta } from '../domain/types'
@@ -21,7 +21,8 @@ function ImportPanel() {
     setPlan(null)
     setStatus('Читаю файл…')
     try {
-      const backup = parseImport(extractBackupJson(new Uint8Array(await file.arrayBuffer())))
+      const { json, files } = extractArchive(new Uint8Array(await file.arrayBuffer()))
+      const backup = parseImport(json, files)
       const next = planImport(await exportSnapshot(), backup)
       setStatus(describeImport(next))
       setPlan(importSize(next) > 0 ? next : null)

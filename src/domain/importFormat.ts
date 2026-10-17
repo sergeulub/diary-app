@@ -1,22 +1,28 @@
 import { strFromU8, unzipSync } from 'fflate'
 import { isLater } from './dates'
-import { FORMAT_VERSION, type Backup } from './exportFormat'
+import { FORMAT_VERSION } from './exportFormat'
 import { IMPORTANCES } from './finance'
 import { AREAS, isGoalTarget, isMonth } from './goals'
 import { validateMetricValue } from './metrics'
 import { MAX_AMOUNT } from './money'
 import type {
   DayRecord, DiarySnapshot, EntryRecord, FaceKind, FinanceCategory, FinanceKind, Goal, GoalArea, Importance, Meta,
-  MetricDefinition, MetricType, MetricValue, Transaction,
+  MetricDefinition, MetricType, MetricValue, PhotoRecord, Transaction,
 } from './types'
 
 /** Ошибка импорта с текстом для пользователя. */
 export class ImportError extends Error {}
 
-/** Принимает zip экспорта или голый backup.json. */
-export function extractBackupJson(bytes: Uint8Array): string {
+/** Бэкап, прочитанный из файла: весь дневник, фото — с байтами из архива. */
+export interface ImportedBackup extends DiarySnapshot {
+  formatVersion: number
+  exportedAt: string
+}
+
+/** Принимает zip экспорта или голый backup.json; files — остальные файлы архива (фото). */
+export function extractArchive(bytes: Uint8Array): { json: string; files: Record<string, Uint8Array> } {
   const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b // «PK»
-  if (!isZip) return strFromU8(bytes)
+  if (!isZip) return { json: strFromU8(bytes), files: {} }
   let files: Record<string, Uint8Array>
   try {
     files = unzipSync(bytes)
@@ -25,8 +31,10 @@ export function extractBackupJson(bytes: Uint8Array): string {
   }
   const backup = files['backup.json']
   if (!backup) throw new ImportError('В архиве нет backup.json')
-  return strFromU8(backup)
+  return { json: strFromU8(backup), files }
 }
+
+export const extractBackupJson = (bytes: Uint8Array): string => extractArchive(bytes).json
 
 type Obj = Record<string, unknown>
 const isObj = (x: unknown): x is Obj => typeof x === 'object' && x !== null && !Array.isArray(x)
@@ -89,16 +97,42 @@ function parseDayRecord(x: unknown, i: number, defs: Map<string, MetricDefinitio
   }
 }
 
+const optStr = (x: unknown) => x === undefined || isStr(x)
+
 function parseEntry(x: unknown, i: number): EntryRecord {
   if (
     !isObj(x) || !isStr(x.id) || !isStr(x.day) || !isStr(x.text) || !isStamp(x.createdAt) ||
-    !isStamp(x.updatedAt) || !(x.deletedAt === null || x.deletedAt === undefined || isStamp(x.deletedAt))
+    !isStamp(x.updatedAt) || !(x.deletedAt === null || x.deletedAt === undefined || isStamp(x.deletedAt)) ||
+    !(x.kind === undefined || x.kind === 'review') || !optStr(x.verdict) || !optStr(x.change)
   ) {
     throw new ImportError(`Запись №${i + 1}: ${BAD_FIELDS}`)
   }
   return {
-    id: x.id, day: x.day, text: x.text, createdAt: x.createdAt, updatedAt: x.updatedAt,
+    id: x.id, day: x.day,
+    ...(x.kind === 'review' ? { kind: 'review' as const } : {}),
+    text: x.text,
+    ...(isStr(x.verdict) ? { verdict: x.verdict } : {}),
+    ...(isStr(x.change) ? { change: x.change } : {}),
+    createdAt: x.createdAt, updatedAt: x.updatedAt,
     deletedAt: isStamp(x.deletedAt) ? x.deletedAt : null,
+  }
+}
+
+/** Живое фото без файла в архиве (импорт голого backup.json) пропускается — null. */
+function parsePhoto(x: unknown, i: number, files: Record<string, Uint8Array>): PhotoRecord | null {
+  if (
+    !isObj(x) || !isStr(x.id) || !x.id || !isStr(x.entryId) || !isStr(x.day) || !DAY_RE.test(x.day) || !isStr(x.type) ||
+    !(x.file === null || x.file === undefined || isStr(x.file)) ||
+    !isStamp(x.createdAt) || !isStamp(x.updatedAt) || !isDeletedAt(x.deletedAt)
+  ) {
+    throw new ImportError(`Фото №${i + 1}: ${BAD_FIELDS}`)
+  }
+  const deletedAt = isStamp(x.deletedAt) ? x.deletedAt : null
+  const bytes = deletedAt ? new Uint8Array(0) : isStr(x.file) ? files[x.file] : undefined
+  if (!bytes) return null
+  return {
+    id: x.id, entryId: x.entryId, day: x.day, type: x.type, bytes,
+    createdAt: x.createdAt, updatedAt: x.updatedAt, deletedAt,
   }
 }
 
@@ -179,7 +213,7 @@ function parseMeta(x: unknown): Meta {
   }
 }
 
-export function parseImport(json: string): Backup {
+export function parseImport(json: string, files: Record<string, Uint8Array> = {}): ImportedBackup {
   let raw: unknown
   try {
     raw = JSON.parse(json.replace(/^﻿/, ''))
@@ -208,6 +242,7 @@ export function parseImport(json: string): Backup {
     financeCategories: list(raw.financeCategories).map(parseCategory),
     transactions: list(raw.transactions).map(parseTransaction),
     goals: list(raw.goals).map(parseGoal),
+    photos: list(raw.photos).flatMap((p, i) => parsePhoto(p, i, files) ?? []),
     meta: parseMeta(raw.meta),
   }
 }
@@ -225,6 +260,7 @@ export interface ImportPlan {
   financeCategories: MergePart<FinanceCategory>
   transactions: MergePart<Transaction>
   goals: MergePart<Goal>
+  photos: MergePart<PhotoRecord>
 }
 
 /** Слияние по ключу: нового нет — добавить; в файле свежее `updatedAt` — заменить; иначе оставить своё. */
@@ -243,8 +279,8 @@ function mergeBy<T extends { updatedAt: string }>(current: T[], incoming: T[], k
 }
 
 export function planImport(
-  current: Pick<DiarySnapshot, 'days' | 'metricDefinitions' | 'entries' | 'financeCategories' | 'transactions' | 'goals'>,
-  incoming: Backup,
+  current: Pick<DiarySnapshot, 'days' | 'metricDefinitions' | 'entries' | 'financeCategories' | 'transactions' | 'goals' | 'photos'>,
+  incoming: ImportedBackup,
 ): ImportPlan {
   return {
     days: mergeBy(current.days, incoming.days, (d) => d.day),
@@ -253,6 +289,7 @@ export function planImport(
     financeCategories: mergeBy(current.financeCategories, incoming.financeCategories, (c) => c.key),
     transactions: mergeBy(current.transactions, incoming.transactions, (t) => t.id),
     goals: mergeBy(current.goals, incoming.goals, (g) => g.id),
+    photos: mergeBy(current.photos, incoming.photos, (p) => p.id),
   }
 }
 
@@ -268,6 +305,7 @@ export function describeImport(plan: ImportPlan): string {
   const parts = [describePart('Дней', plan.days), describePart('Метрик', plan.metricDefinitions)]
   const extra: [string, MergePart<unknown>][] = [
     ['Категорий', plan.financeCategories], ['Операций', plan.transactions], ['Целей', plan.goals],
+    ['Разборов', plan.entries], ['Фото', plan.photos],
   ]
   for (const [label, p] of extra) if (p.put.length) parts.push(describePart(label, p))
   return parts.join(' ')

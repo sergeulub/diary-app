@@ -215,7 +215,7 @@ export async function exportSnapshot(): Promise<DiarySnapshot> {
 }
 
 export async function applyImport(plan: ImportPlan): Promise<void> {
-  const tables = [db.days, db.metricDefinitions, db.entries, db.financeCategories, db.transactions, db.goals]
+  const tables = [db.days, db.metricDefinitions, db.entries, db.financeCategories, db.transactions, db.goals, db.photos]
   await db.transaction('rw', tables, async () => {
     await db.days.bulkPut(plan.days.put)
     await db.metricDefinitions.bulkPut(plan.metricDefinitions.put)
@@ -223,5 +223,6 @@ export async function applyImport(plan: ImportPlan): Promise<void> {
     await db.financeCategories.bulkPut(plan.financeCategories.put)
     await db.transactions.bulkPut(plan.transactions.put)
     await db.goals.bulkPut(plan.goals.put)
+    await db.photos.bulkPut(plan.photos.put)
   })
 }

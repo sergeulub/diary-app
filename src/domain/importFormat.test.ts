@@ -1,17 +1,18 @@
 import { strToU8, zipSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
 import { buildBackup, buildExportZip } from './exportFormat'
-import { ImportError, describeImport, extractBackupJson, importSize, parseImport, planImport } from './importFormat'
+import { ImportError, describeImport, extractArchive, extractBackupJson, importSize, parseImport, planImport } from './importFormat'
 import { DEFAULT_METRICS, SEED_TIME } from './metrics'
 import { DEFAULT_CATEGORIES } from './finance'
-import { dayRec, goalRec, txRec } from './testFixtures'
+import { dayRec, goalRec, photoRec, reviewRec, txRec } from './testFixtures'
 import type { DiarySnapshot } from './types'
 
 const meta = { boundaryHour: 6, lastExportAt: null, schemaVersion: 1 }
 const snapshot = (patch: Partial<DiarySnapshot> = {}): DiarySnapshot => ({
-  metricDefinitions: DEFAULT_METRICS, days: [], entries: [], financeCategories: [], transactions: [], goals: [], meta, ...patch,
+  metricDefinitions: DEFAULT_METRICS, days: [], entries: [], financeCategories: [], transactions: [], goals: [], photos: [], meta,
+  ...patch,
 })
-const EMPTY = { days: [], metricDefinitions: [], entries: [], financeCategories: [], transactions: [], goals: [] }
+const EMPTY = { days: [], metricDefinitions: [], entries: [], financeCategories: [], transactions: [], goals: [], photos: [] }
 const json = (s: DiarySnapshot) => JSON.stringify(buildBackup(s, '2026-10-06T22:00:00.000+03:00'))
 
 describe('extractBackupJson', () => {
@@ -40,8 +41,8 @@ describe('parseImport', () => {
     expect(() => parseImport('{"days":[]}')).toThrow(/не похож на бэкап/)
   })
   it('будущая formatVersion отклоняется с просьбой обновиться', () => {
-    expect(() => parseImport(JSON.stringify({ ...JSON.parse(json(snapshot())), formatVersion: 3 }))).toThrow(
-      /более новой версией приложения \(формат 3\)/,
+    expect(() => parseImport(JSON.stringify({ ...JSON.parse(json(snapshot())), formatVersion: 4 }))).toThrow(
+      /более новой версией приложения \(формат 4\)/,
     )
   })
   it('недопустимое значение метрики называет день и метрику', () => {
@@ -203,5 +204,42 @@ describe('бэкап v2: финансы и цели', () => {
       'Дней: будет добавлено 0, обновлено 0. Метрик: будет добавлено 0, обновлено 0. ' +
         'Операций: будет добавлено 1, обновлено 1. Целей: будет добавлено 1, обновлено 0.',
     )
+  })
+})
+
+describe('бэкап v3: разборы и фото', () => {
+  const review = reviewRec('2026-10-17', { text: 'Йогурт', verdict: 'Наполовину', change: 'Крышку ярче' })
+  const live = photoRec(review.id, { id: 'p1', bytes: new Uint8Array([7, 8, 9]) })
+  const gone = photoRec(review.id, { id: 'p2', bytes: new Uint8Array(0), deletedAt: '2026-10-17T23:00:00.000+03:00' })
+  const s = snapshot({ entries: [review], photos: [live, gone] })
+  const zip = () => buildExportZip(s, new Date(2026, 9, 17, 23)).bytes
+
+  it('экспорт → импорт в пустой дневник возвращает разбор и байты фото', () => {
+    const { json: text, files } = extractArchive(zip())
+    const plan = planImport(EMPTY, parseImport(text, files))
+    expect(plan.entries.put).toEqual([review])
+    expect(plan.photos.put.map((p) => [p.id, Array.from(p.bytes), p.deletedAt])).toEqual([
+      ['p1', [7, 8, 9], null],
+      ['p2', [], gone.deletedAt],
+    ])
+    expect(describeImport(plan)).toBe(
+      'Дней: будет добавлено 0, обновлено 0. Метрик: будет добавлено 4, обновлено 0. ' +
+        'Разборов: будет добавлено 1, обновлено 0. Фото: будет добавлено 2, обновлено 0.',
+    )
+  })
+  it('голый backup.json: живые фото без файла пропускаются, удалённые переносятся', () => {
+    const backup = parseImport(extractBackupJson(zip()))
+    expect(backup.entries).toEqual([review])
+    expect(backup.photos.map((p) => p.id)).toEqual(['p2'])
+  })
+  it('разбор с полем не той формы — отказ с номером', () => {
+    const raw = JSON.parse(json(snapshot({ entries: [review] })))
+    raw.entries[0].verdict = 5
+    expect(() => parseImport(JSON.stringify(raw))).toThrow('Запись №1: не хватает полей или они неверного типа')
+  })
+  it('файл формата 2 без фото читается', () => {
+    const v2 = { ...JSON.parse(json(snapshot())), formatVersion: 2 }
+    delete v2.photos
+    expect(parseImport(JSON.stringify(v2)).photos).toEqual([])
   })
 })
