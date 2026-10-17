@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { DayRecord, EntryRecord, FinanceCategory, Goal, MetricDefinition, Transaction } from '../domain/types'
+import type { DayRecord, EntryRecord, FinanceCategory, Goal, MetricDefinition, PhotoRecord, Transaction } from '../domain/types'
 
 export interface MetaRow {
   key: string
@@ -15,6 +15,7 @@ export const db = new Dexie('diary') as Dexie & {
   financeCategories: EntityTable<FinanceCategory, 'key'>
   transactions: EntityTable<Transaction, 'id'>
   goals: EntityTable<Goal, 'id'>
+  photos: EntityTable<PhotoRecord, 'id'>
 }
 
 // Схема меняется только добавлением db.version(2).stores(...).upgrade(...); версию 1 после релиза не править.
@@ -33,3 +34,8 @@ db.version(2)
     goals: 'id, month, updatedAt',
   })
   .upgrade((tx) => tx.table('meta').put({ key: 'schemaVersion', value: 2 }))
+
+// Разборы насмотренности: строки entries с kind 'review' (таблица уже есть) и их фото.
+db.version(3)
+  .stores({ photos: 'id, entryId, day, updatedAt' })
+  .upgrade((tx) => tx.table('meta').put({ key: 'schemaVersion', value: 3 }))

@@ -4,12 +4,16 @@ import type { ImportPlan } from '../domain/importFormat'
 import { DEFAULT_CATEGORIES, sortCategories } from '../domain/finance'
 import { logicalDay } from '../domain/logicalDay'
 import { DEFAULT_METRICS, isDayComplete, isDayFilled, sortMetrics } from '../domain/metrics'
+import {
+  applyReviewPatch, createPhoto, createReview, deletePhoto, deleteReview, livePhotos, reviewsOfDay, type ReviewPatch,
+} from '../domain/reviews'
 import type {
-  DayRecord, DiarySnapshot, FinanceCategory, Goal, Meta, MetricDefinition, MetricValue, Transaction,
+  DayRecord, DiarySnapshot, EntryRecord, FinanceCategory, Goal, Meta, MetricDefinition, MetricValue, PhotoRecord,
+  Transaction,
 } from '../domain/types'
 import { db } from './database'
 
-const DEFAULT_META: Meta = { boundaryHour: 6, lastExportAt: null, schemaVersion: 2 }
+const DEFAULT_META: Meta = { boundaryHour: 6, lastExportAt: null, schemaVersion: 3 }
 
 export async function initDb(): Promise<void> {
   await db.transaction('rw', db.metricDefinitions, db.meta, db.financeCategories, async () => {
@@ -125,8 +129,79 @@ export async function saveDay(day: string, patch: DayPatch, now: Date): Promise<
   })
 }
 
+export async function addReview(day: string, now: Date): Promise<EntryRecord> {
+  const review = createReview(day, isoWithOffset(now))
+  await db.entries.add(review)
+  return review
+}
+
+/** Чтение и запись в одной транзакции: сохранения разных полей не затирают друг друга. */
+export async function saveReview(id: string, patch: ReviewPatch, now: Date): Promise<void> {
+  await db.transaction('rw', db.entries, async () => {
+    const current = await db.entries.get(id)
+    if (!current) throw new Error('Разбор не найден')
+    await db.entries.put(applyReviewPatch(current, patch, isoWithOffset(now)))
+  })
+}
+
+/** Мягко удаляет разбор и все его фото. */
+export async function removeReview(id: string, now: Date): Promise<void> {
+  const stamp = isoWithOffset(now)
+  await db.transaction('rw', db.entries, db.photos, async () => {
+    const current = await db.entries.get(id)
+    if (!current) return
+    await db.entries.put(deleteReview(current, stamp))
+    const photos = livePhotos(await db.photos.where('entryId').equals(id).toArray(), id)
+    await db.photos.bulkPut(photos.map((p) => deletePhoto(p, stamp)))
+  })
+}
+
+/** Живые разборы дня по порядку создания. */
+export async function listReviews(day: string): Promise<EntryRecord[]> {
+  return reviewsOfDay(await db.entries.where('day').equals(day).toArray(), day)
+}
+
+/** Записи с from по to включительно, вместе с удалёнными: отбирает домен. */
+export async function listEntries(from: string, to: string): Promise<EntryRecord[]> {
+  return db.entries.where('day').between(from, to, true, true).toArray()
+}
+
+/** Фото — изменение разбора: его updatedAt сдвигается, и день попадает в следующий Markdown. */
+export async function addPhoto(entryId: string, type: string, bytes: Uint8Array, now: Date): Promise<PhotoRecord> {
+  const stamp = isoWithOffset(now)
+  return db.transaction('rw', db.entries, db.photos, async () => {
+    const entry = await db.entries.get(entryId)
+    if (!entry) throw new Error('Разбор не найден')
+    const photo = createPhoto(entry, type, bytes, stamp)
+    await db.photos.add(photo)
+    await db.entries.put({ ...entry, updatedAt: stamp })
+    return photo
+  })
+}
+
+export async function removePhoto(id: string, now: Date): Promise<void> {
+  const stamp = isoWithOffset(now)
+  await db.transaction('rw', db.entries, db.photos, async () => {
+    const photo = await db.photos.get(id)
+    if (!photo || photo.deletedAt) return
+    await db.photos.put(deletePhoto(photo, stamp))
+    const entry = await db.entries.get(photo.entryId)
+    if (entry) await db.entries.put({ ...entry, updatedAt: stamp })
+  })
+}
+
+/** Живые фото записи по порядку добавления. */
+export async function listPhotos(entryId: string): Promise<PhotoRecord[]> {
+  return livePhotos(await db.photos.where('entryId').equals(entryId).toArray(), entryId)
+}
+
+/** Фото с from по to включительно, вместе с удалёнными. */
+export async function listPhotosBetween(from: string, to: string): Promise<PhotoRecord[]> {
+  return db.photos.where('day').between(from, to, true, true).toArray()
+}
+
 export async function exportSnapshot(): Promise<DiarySnapshot> {
-  const tables = [db.days, db.metricDefinitions, db.entries, db.meta, db.financeCategories, db.transactions, db.goals]
+  const tables = [db.days, db.metricDefinitions, db.entries, db.meta, db.financeCategories, db.transactions, db.goals, db.photos]
   return db.transaction('r', tables, async () => ({
     metricDefinitions: await db.metricDefinitions.toArray(),
     days: await db.days.toArray(),
@@ -134,6 +209,7 @@ export async function exportSnapshot(): Promise<DiarySnapshot> {
     financeCategories: await db.financeCategories.toArray(),
     transactions: await db.transactions.toArray(),
     goals: await db.goals.toArray(),
+    photos: await db.photos.toArray(),
     meta: await getMeta(),
   }))
 }

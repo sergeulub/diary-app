@@ -12,7 +12,8 @@ import { db } from './database'
 import {
   applyImport, exportSnapshot, getDay, getFinanceCategories, getMeta, getMetrics, initDb, listDays, listFilledDays,
   listGoals, listStreakDays, listTransactions, saveDay, saveFinanceCategories, saveGoals, saveMetrics, saveTransaction,
-  setMeta,
+  setMeta, addPhoto, addReview, listEntries, listPhotos, listPhotosBetween, listReviews, removePhoto, removeReview,
+  saveReview,
 } from './diary'
 
 const at = (d: number, h = 22) => new Date(2026, 9, d, h)
@@ -28,7 +29,7 @@ beforeEach(freshDb)
 describe('initDb', () => {
   it('засевает четыре метрики и meta по умолчанию', async () => {
     expect((await getMetrics()).map((d) => d.key)).toEqual(['mood', 'boredom', 'sleepStart', 'sleepEnd'])
-    expect(await getMeta()).toEqual({ boundaryHour: 6, lastExportAt: null, schemaVersion: 2 })
+    expect(await getMeta()).toEqual({ boundaryHour: 6, lastExportAt: null, schemaVersion: 3 })
   })
   it('повторный запуск не дублирует и не затирает правки', async () => {
     await saveMetrics([{ ...DEFAULT_METRICS[1], name: 'Тоска' }])
@@ -177,8 +178,56 @@ describe('финансы и цели в базе', () => {
   })
 })
 
-describe('апгрейд базы v1 → v2', () => {
-  it('сохраняет дни, метрики и настройки, засевает категории, ставит schemaVersion 2', async () => {
+describe('разборы и фото в базе', () => {
+  it('addReview создаёт пустой разбор, listReviews отдаёт живые разборы дня по порядку', async () => {
+    const a = await addReview('2026-10-17', at(17, 21))
+    const b = await addReview('2026-10-17', at(17, 22))
+    await addReview('2026-10-16', at(16))
+    expect((await listReviews('2026-10-17')).map((e) => e.id)).toEqual([a.id, b.id])
+    await removeReview(a.id, at(17, 23))
+    expect((await listReviews('2026-10-17')).map((e) => e.id)).toEqual([b.id])
+  })
+  it('одновременные сохранения разных полей не затирают друг друга', async () => {
+    const r = await addReview('2026-10-17', at(17, 21))
+    await Promise.all([
+      saveReview(r.id, { text: 'Йогурт' }, at(17, 22)),
+      saveReview(r.id, { verdict: 'Наполовину' }, at(17, 22)),
+      saveReview(r.id, { change: 'Крышку ярче' }, at(17, 22)),
+    ])
+    expect((await listReviews('2026-10-17'))[0]).toMatchObject({ text: 'Йогурт', verdict: 'Наполовину', change: 'Крышку ярче' })
+  })
+  it('фото: добавление и удаление обновляют updatedAt разбора; удаление разбора удаляет его фото', async () => {
+    const r = await addReview('2026-10-17', at(17, 21))
+    const p = await addPhoto(r.id, 'image/jpeg', new Uint8Array([1, 2, 3]), at(17, 22))
+    expect(p).toMatchObject({ entryId: r.id, day: '2026-10-17' })
+    expect((await listReviews('2026-10-17'))[0].updatedAt).toBe(isoWithOffset(at(17, 22)))
+    expect(await listPhotos(r.id)).toHaveLength(1)
+    await removePhoto(p.id, at(17, 23))
+    expect(await listPhotos(r.id)).toEqual([])
+    expect((await listReviews('2026-10-17'))[0].updatedAt).toBe(isoWithOffset(at(17, 23)))
+
+    const q = await addPhoto(r.id, 'image/jpeg', new Uint8Array([4]), at(18))
+    await removeReview(r.id, at(19))
+    expect(await listPhotos(r.id)).toEqual([])
+    const [stored] = (await listPhotosBetween('2026-10-01', '2026-10-31')).filter((x) => x.id === q.id)
+    expect(stored.deletedAt).not.toBeNull()
+    expect(stored.bytes.length).toBe(0)
+  })
+  it('listEntries и снимок для экспорта включают разборы и фото', async () => {
+    const r = await addReview('2026-10-17', at(17, 21))
+    await addPhoto(r.id, 'image/jpeg', new Uint8Array([9]), at(17, 22))
+    expect(await listEntries('2026-10-01', '2026-10-31')).toHaveLength(1)
+    const snap = await exportSnapshot()
+    expect(snap.entries).toHaveLength(1)
+    expect(Array.from(snap.photos[0].bytes)).toEqual([9])
+  })
+  it('сохранение несуществующего разбора — ошибка', async () => {
+    await expect(saveReview('нет-такого', { text: 'x' }, at(17))).rejects.toThrow()
+  })
+})
+
+describe('апгрейд базы v1 → v3', () => {
+  it('сохраняет дни, метрики и настройки, засевает категории, ставит schemaVersion 3', async () => {
     await db.delete()
     const v1 = new Dexie('diary')
     v1.version(1).stores({ days: 'day, updatedAt', metricDefinitions: 'key', entries: 'id, day, updatedAt', meta: 'key' })
@@ -195,7 +244,7 @@ describe('апгрейд базы v1 → v2', () => {
     await initDb()
     expect(await getDay('2026-10-05')).toEqual(day)
     expect(await getMetrics()).toHaveLength(4)
-    expect(await getMeta()).toEqual({ boundaryHour: 4, lastExportAt: null, schemaVersion: 2 })
+    expect(await getMeta()).toEqual({ boundaryHour: 4, lastExportAt: null, schemaVersion: 3 })
     expect(await getFinanceCategories()).toHaveLength(DEFAULT_CATEGORIES.length)
   })
 })
