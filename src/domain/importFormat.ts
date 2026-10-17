@@ -1,13 +1,13 @@
 import { strFromU8, unzipSync } from 'fflate'
 import { isLater } from './dates'
 import { FORMAT_VERSION } from './exportFormat'
-import { IMPORTANCES } from './finance'
+import { IMPORTANCES, SAVINGS_KINDS, isSavings } from './finance'
 import { AREAS, isGoalTarget, isMonth } from './goals'
 import { validateMetricValue } from './metrics'
 import { MAX_AMOUNT } from './money'
 import type {
   DayRecord, DiarySnapshot, EntryRecord, FaceKind, FinanceCategory, FinanceKind, Goal, GoalArea, Importance, Meta,
-  MetricDefinition, MetricType, MetricValue, PhotoRecord, Transaction,
+  MetricDefinition, MetricType, MetricValue, PhotoRecord, Transaction, TransactionKind,
 } from './types'
 
 /** Ошибка импорта с текстом для пользователя. */
@@ -137,6 +137,7 @@ function parsePhoto(x: unknown, i: number, files: Record<string, Uint8Array>): P
 }
 
 const KINDS: FinanceKind[] = ['expense', 'income']
+const TX_KINDS: TransactionKind[] = [...KINDS, ...SAVINGS_KINDS]
 const isDeletedAt = (x: unknown) => x === null || x === undefined || isStamp(x)
 
 function parseCategory(x: unknown, i: number): FinanceCategory {
@@ -161,9 +162,10 @@ function parseCategory(x: unknown, i: number): FinanceCategory {
 
 function parseTransaction(x: unknown, i: number): Transaction {
   if (
-    !isObj(x) || !isStr(x.id) || !x.id || !isStr(x.day) || !DAY_RE.test(x.day) || !KINDS.includes(x.kind as FinanceKind) ||
+    !isObj(x) || !isStr(x.id) || !x.id || !isStr(x.day) || !DAY_RE.test(x.day) ||
+    !TX_KINDS.includes(x.kind as TransactionKind) ||
     typeof x.amount !== 'number' || !Number.isInteger(x.amount) || x.amount <= 0 || x.amount > MAX_AMOUNT ||
-    !isStr(x.categoryKey) || !x.categoryKey || (x.note !== undefined && !isStr(x.note)) ||
+    !isStr(x.categoryKey) || !x.categoryKey !== isSavings(x.kind as TransactionKind) || (x.note !== undefined && !isStr(x.note)) ||
     !isStamp(x.createdAt) || !isStamp(x.updatedAt) || !isDeletedAt(x.deletedAt)
   ) {
     throw new ImportError(`Операция №${i + 1}: ${BAD_FIELDS}`)
@@ -171,7 +173,7 @@ function parseTransaction(x: unknown, i: number): Transaction {
   return {
     id: x.id,
     day: x.day,
-    kind: x.kind as FinanceKind,
+    kind: x.kind as TransactionKind,
     amount: x.amount,
     categoryKey: x.categoryKey,
     ...(isStr(x.note) ? { note: x.note } : {}),

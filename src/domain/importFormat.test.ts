@@ -41,8 +41,8 @@ describe('parseImport', () => {
     expect(() => parseImport('{"days":[]}')).toThrow(/не похож на бэкап/)
   })
   it('будущая formatVersion отклоняется с просьбой обновиться', () => {
-    expect(() => parseImport(JSON.stringify({ ...JSON.parse(json(snapshot())), formatVersion: 4 }))).toThrow(
-      /более новой версией приложения \(формат 4\)/,
+    expect(() => parseImport(JSON.stringify({ ...JSON.parse(json(snapshot())), formatVersion: 5 }))).toThrow(
+      /более новой версией приложения \(формат 5\)/,
     )
   })
   it('недопустимое значение метрики называет день и метрику', () => {
@@ -175,10 +175,24 @@ describe('бэкап v2: финансы и цели', () => {
     ['дробные копейки', { amount: 10.5 }],
     ['неверный вид', { kind: 'refund' }],
     ['неверная дата', { day: '2026-11-31x' }],
+    ['накопление с категорией', { kind: 'save', categoryKey: 'cafe' }],
+    ['трата без категории', { kind: 'expense', categoryKey: '' }],
   ])('операция: %s — отказ с номером', (_, patch) => {
     const raw = JSON.parse(json(snapshot({ transactions: [txRec('2026-11-02')] })))
     Object.assign(raw.transactions[0], patch)
     expect(() => parseImport(JSON.stringify(raw))).toThrow('Операция №1: не хватает полей или они неверного типа')
+  })
+  it('операции накоплений версии 4 импортируются', () => {
+    const txs = [
+      txRec('2026-11-05', { kind: 'save', categoryKey: '', amount: 1_000_000, note: 'с зарплаты' }),
+      txRec('2026-11-07', { kind: 'withdraw', categoryKey: '', amount: 300000 }),
+    ]
+    expect(parseImport(json(snapshot({ transactions: txs }))).transactions).toEqual(txs)
+  })
+  it('файл формата 3 с доходами и тратами читается как раньше', () => {
+    const txs = [txRec('2026-11-02'), txRec('2026-11-02', { kind: 'income', categoryKey: 'salary' })]
+    const v3 = { ...JSON.parse(json(snapshot({ transactions: txs }))), formatVersion: 3 }
+    expect(parseImport(JSON.stringify(v3)).transactions).toEqual(txs)
   })
   it('категория трат без важности — отказ; у дохода важность отбрасывается', () => {
     const noImportance = { ...DEFAULT_CATEGORIES[0] }

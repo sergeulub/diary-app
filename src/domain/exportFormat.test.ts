@@ -1,6 +1,6 @@
 import { strFromU8, unzipSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
-import { buildExportZip, metricsLine, renderMarkdown, selectChangedDays } from './exportFormat'
+import { FORMAT_VERSION, buildExportZip, financeLines, metricsLine, renderMarkdown, selectChangedDays } from './exportFormat'
 import { DEFAULT_CATEGORIES } from './finance'
 import { DEFAULT_METRICS } from './metrics'
 import { T0, dayRec, goalRec, photoRec, reviewRec, txRec } from './testFixtures'
@@ -128,6 +128,17 @@ describe('renderMarkdown', () => {
         'Обычный день\n',
     )
   })
+  it('строки накоплений после доходов и трат, комментарии в скобках', () => {
+    const day = [
+      txRec('2026-11-05', { kind: 'save', categoryKey: '', amount: 1_000_000, note: 'с зарплаты' }),
+      txRec('2026-11-05', { kind: 'withdraw', categoryKey: '', amount: 300000 }),
+      txRec('2026-11-05', { categoryKey: 'groceries', amount: 80000 }),
+    ]
+    expect(financeLines(day, DEFAULT_CATEGORIES)).toEqual([
+      'Траты: 800 ₽ — Продукты 800', 'Отложил: 10 000 ₽ (с зарплаты)', 'Взял: 3 000 ₽',
+    ])
+  })
+  it('formatVersion 4', () => expect(FORMAT_VERSION).toBe(4))
   it('разборы после текста дня: пустые строки пропускаются, пустой и удалённый разбор не выводятся', () => {
     const first = reviewRec('2026-10-17', {
       text: ' Йогурт «Белое облако», полка у дома ', verdict: 'Наполовину', createdAt: '2026-10-17T21:00:00.000+03:00',
@@ -219,7 +230,7 @@ describe('buildExportZip', () => {
   it('backup.json — весь дневник с formatVersion и exportedAt со смещением', () => {
     const files = unzipSync(buildExportZip(snapshot, now).bytes)
     const backup = JSON.parse(strFromU8(files['backup.json']))
-    expect(backup.formatVersion).toBe(3)
+    expect(backup.formatVersion).toBe(4)
     expect(backup.exportedAt).toMatch(/^2026-10-06T22:15:00\.000[+-]\d{2}:\d{2}$/)
     expect(backup.days).toEqual(snapshot.days)
     expect(backup.metricDefinitions).toEqual(snapshot.metricDefinitions)

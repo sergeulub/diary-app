@@ -1,6 +1,6 @@
 import { strToU8, zipSync, type Zippable } from 'fflate'
 import { isLater, isoWithOffset, monthOf } from './dates'
-import { liveTransactions, totalsByCategory } from './finance'
+import { SAVINGS_KINDS, SAVINGS_LABELS, liveTransactions, totalsByCategory } from './finance'
 import { AREA_LABELS, GOAL_STATE_LABELS, formatGoalValue, goalProgress, goalsOfMonth } from './goals'
 import { formatDate, logicalDay } from './logicalDay'
 import { SCALE_LABELS, isDayFilled, sortMetrics } from './metrics'
@@ -12,7 +12,7 @@ import type {
   DayRecord, DiarySnapshot, EntryRecord, FinanceCategory, MetricDefinition, MetricValue, PhotoRecord, Transaction,
 } from './types'
 
-export const FORMAT_VERSION = 3
+export const FORMAT_VERSION = 4
 
 /** Фото в backup.json — без байтов; file — путь в zip, у удалённого null. */
 export type PhotoMeta = Omit<PhotoRecord, 'bytes'> & { file: string | null }
@@ -105,7 +105,7 @@ export function metricsLine(rec: DayRecord, defs: MetricDefinition[]): string {
 
 const KIND_TITLES = { income: 'Доходы', expense: 'Траты' } as const
 
-/** «Доходы: …» и «Траты: …» дня; категории по убыванию суммы, комментарии в скобках. */
+/** «Доходы: …» и «Траты: …» дня — категории по убыванию суммы; затем «Отложил: …» и «Взял: …»; комментарии в скобках. */
 export function financeLines(txs: Transaction[], cats: FinanceCategory[]): string[] {
   const lines: string[] = []
   for (const kind of ['income', 'expense'] as const) {
@@ -117,6 +117,13 @@ export function financeLines(txs: Transaction[], cats: FinanceCategory[]): strin
       return `${c.name} ${formatAmount(c.amount)}${notes.length ? ` (${notes.join(', ')})` : ''}`
     })
     lines.push(`${KIND_TITLES[kind]}: ${formatMoney(total)} — ${parts.join(' · ')}`)
+  }
+  for (const kind of SAVINGS_KINDS) {
+    const ofKind = liveTransactions(txs).filter((t) => t.kind === kind)
+    if (!ofKind.length) continue
+    const notes = ofKind.filter((t) => t.note).map((t) => t.note)
+    const total = ofKind.reduce((sum, t) => sum + t.amount, 0)
+    lines.push(`${SAVINGS_LABELS[kind]}: ${formatMoney(total)}${notes.length ? ` (${notes.join(', ')})` : ''}`)
   }
   return lines
 }
