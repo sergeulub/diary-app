@@ -1,5 +1,5 @@
 import { monthOf } from './dates'
-import { IMPORTANCES, categoryOf, liveTransactions, savingsBalance } from './finance'
+import { IMPORTANCES, categoryOf, liveTransactions, netSaved } from './finance'
 import { formatAmount, formatMoney, parseAmount } from './money'
 import { countReviews } from './reviews'
 import { plural } from './ru'
@@ -155,7 +155,7 @@ function measure(month: string, t: GoalTarget, data: ProgressData): number | nul
           return (categoryOf(x, data.financeCategories).importance ?? 'useful') === t.filter.importance
         })
         .reduce((s, x) => s + x.amount, 0)
-    return t.measure === 'saved' ? savingsBalance(txs) : total(t.measure)
+    return t.measure === 'saved' ? netSaved(txs) : total(t.measure)
   }
   if (t.kind === 'reviews') return countReviews(data.entries, data.photos, month)
   const values = data.days

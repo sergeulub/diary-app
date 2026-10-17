@@ -189,6 +189,11 @@ describe('бэкап v2: финансы и цели', () => {
     ]
     expect(parseImport(json(snapshot({ transactions: txs }))).transactions).toEqual(txs)
   })
+  it('операции накоплений в файле формата 3 — отказ', () => {
+    const txs = [txRec('2026-11-05', { kind: 'save', categoryKey: '', amount: 100 })]
+    const v3 = { ...JSON.parse(json(snapshot({ transactions: txs }))), formatVersion: 3 }
+    expect(() => parseImport(JSON.stringify(v3))).toThrow('Операция №1')
+  })
   it('файл формата 3 с доходами и тратами читается как раньше', () => {
     const txs = [txRec('2026-11-02'), txRec('2026-11-02', { kind: 'income', categoryKey: 'salary' })]
     const v3 = { ...JSON.parse(json(snapshot({ transactions: txs }))), formatVersion: 3 }

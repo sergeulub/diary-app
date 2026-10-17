@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_CATEGORIES, activeCategories, categoriesByUse, createCategory, createTransaction, dayTotals,
+  netSaved,
   deleteTransaction, groupByDay, importanceShares, monthSummary, moveCategory, nextImportance, savingsBalance,
   setCategoryArchived, updateCategory, updateTransaction,
 } from './finance'
@@ -128,8 +129,8 @@ describe('итоги', () => {
     expect(monthSummary(txs, archived, '2026-11').byImportance.optional).toBe(75000)
   })
   it('dayTotals — живые операции дня', () => {
-    expect(dayTotals(txs, '2026-11-02')).toEqual({ income: 0, expense: 125000, count: 2, expenseCount: 2 })
-    expect(dayTotals(txs, '2026-11-04')).toEqual({ income: 0, expense: 0, count: 0, expenseCount: 0 })
+    expect(dayTotals(txs, '2026-11-02')).toEqual({ income: 0, expense: 125000, expenseCount: 2 })
+    expect(dayTotals(txs, '2026-11-04')).toEqual({ income: 0, expense: 0, expenseCount: 0 })
   })
 })
 
@@ -198,9 +199,18 @@ describe('накопления', () => {
     expect(savingsBalance(take)).toBe(-300)
   })
   it('баланс за всё время без удалённых', () => expect(savingsBalance(ops)).toBe(1_200_000))
+  it('netSaved — отложил минус взял по переданному списку', () => {
+    expect(netSaved(ops.filter((t) => t.day.startsWith('2026-11')))).toBe(700000)
+  })
+  it('правка операции накоплений сохраняет вид и пустую категорию', () => {
+    const t = createTransaction({ kind: 'withdraw', amount: 300000, categoryKey: '', day: '2026-11-07', note: 'ремонт' }, T0)
+    const u = updateTransaction(t, { amount: 250000, categoryKey: '', day: '2026-11-06', note: '' }, NOW)
+    expect(u).toMatchObject({ id: t.id, kind: 'withdraw', categoryKey: '', amount: 250000, day: '2026-11-06', updatedAt: NOW })
+    expect('note' in u).toBe(false)
+  })
   it('сумма трат дня и группы без накоплений', () => {
     const day = [txRec('2026-11-05', { amount: 100 }), txRec('2026-11-05', { kind: 'save', categoryKey: '', amount: 5000 })]
-    expect(dayTotals(day, '2026-11-05')).toMatchObject({ income: 0, expense: 100, expenseCount: 1 })
+    expect(dayTotals(day, '2026-11-05')).toEqual({ income: 0, expense: 100, expenseCount: 1 })
     expect(groupByDay(day, '2026-11')[0]).toMatchObject({ expense: 100, income: 0 })
     expect(groupByDay(day, '2026-11')[0].items).toHaveLength(2)
   })

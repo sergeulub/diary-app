@@ -201,8 +201,8 @@ export interface MonthSummary {
 
 const sum = (txs: Transaction[]) => txs.reduce((s, t) => s + t.amount, 0)
 
-/** «Отложил» − «Взял» по живым операциям списка. */
-const netSaved = (txs: Transaction[]) =>
+/** «Отложил» − «Взял» по живым операциям переданного списка (месяц, день — как отобрал вызывающий). */
+export const netSaved = (txs: Transaction[]) =>
   liveTransactions(txs).reduce((s, t) => s + (t.kind === 'save' ? t.amount : t.kind === 'withdraw' ? -t.amount : 0), 0)
 
 /** Всего в накоплениях за всё время, может быть < 0. */
@@ -229,13 +229,12 @@ export function monthSummary(txs: Transaction[], cats: FinanceCategory[], month:
 export function dayTotals(
   txs: Transaction[],
   day: string,
-): { income: number; expense: number; count: number; expenseCount: number } {
+): { income: number; expense: number; expenseCount: number } {
   const ofDay = liveTransactions(txs).filter((t) => t.day === day)
   const expenses = ofDay.filter((t) => t.kind === 'expense')
   return {
     income: sum(ofDay.filter((t) => t.kind === 'income')),
     expense: sum(expenses),
-    count: ofDay.length,
     expenseCount: expenses.length,
   }
 }

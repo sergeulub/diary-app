@@ -160,10 +160,11 @@ function parseCategory(x: unknown, i: number): FinanceCategory {
   }
 }
 
-function parseTransaction(x: unknown, i: number): Transaction {
+/** Операции накоплений появились в формате 4: в файлах старше их быть не может. */
+function parseTransaction(x: unknown, i: number, formatVersion: number): Transaction {
   if (
     !isObj(x) || !isStr(x.id) || !x.id || !isStr(x.day) || !DAY_RE.test(x.day) ||
-    !TX_KINDS.includes(x.kind as TransactionKind) ||
+    !TX_KINDS.includes(x.kind as TransactionKind) || (formatVersion < 4 && isSavings(x.kind as TransactionKind)) ||
     typeof x.amount !== 'number' || !Number.isInteger(x.amount) || x.amount <= 0 || x.amount > MAX_AMOUNT ||
     !isStr(x.categoryKey) || !x.categoryKey !== isSavings(x.kind as TransactionKind) || (x.note !== undefined && !isStr(x.note)) ||
     !isStamp(x.createdAt) || !isStamp(x.updatedAt) || !isDeletedAt(x.deletedAt)
@@ -242,7 +243,7 @@ export function parseImport(json: string, files: Record<string, Uint8Array> = {}
     days: raw.days.map((d, i) => parseDayRecord(d, i, defs)),
     entries: list(raw.entries).map(parseEntry),
     financeCategories: list(raw.financeCategories).map(parseCategory),
-    transactions: list(raw.transactions).map(parseTransaction),
+    transactions: list(raw.transactions).map((t, i) => parseTransaction(t, i, raw.formatVersion as number)),
     goals: list(raw.goals).map(parseGoal),
     photos: list(raw.photos).flatMap((p, i) => parsePhoto(p, i, files) ?? []),
     meta: parseMeta(raw.meta),

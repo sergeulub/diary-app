@@ -154,7 +154,7 @@ export default function TransactionSheet({ initial, today, onClose }: {
       {noteOpen && (
         <input
           value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} aria-label="Комментарий"
-          placeholder="Например, «кофе с Машей»"
+          placeholder={tab === 'savings' ? 'Например, «с зарплаты»' : 'Например, «кофе с Машей»'}
           className="min-h-[44px] rounded-[14px] border border-line bg-surface px-3.5 text-[16px] text-ink outline-none placeholder:text-muted"
         />
       )}
