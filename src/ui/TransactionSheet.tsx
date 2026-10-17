@@ -3,26 +3,39 @@ import { useRef, useState } from 'react'
 import { getFinanceCategories, listTransactions, saveTransaction } from '../db/diary'
 import { addDays } from '../domain/dates'
 import {
-  IMPORTANCES, IMPORTANCE_LABELS, categoriesByUse, createTransaction, deleteTransaction, updateTransaction,
+  IMPORTANCES, IMPORTANCE_LABELS, SAVINGS_KINDS, SAVINGS_LABELS, categoriesByUse, createTransaction, deleteTransaction,
+  isSavings, updateTransaction,
 } from '../domain/finance'
 import { formatAmount, parseAmount } from '../domain/money'
 import { dayGroupTitle } from '../domain/ru'
-import type { FinanceKind, Transaction } from '../domain/types'
+import type { FinanceKind, SavingsKind, Transaction, TransactionKind } from '../domain/types'
 import { errorText } from './errors'
-import { ImpDot, Segmented, Sheet, now } from './financeUi'
+import { ImpDot, SavingsIcon, Segmented, Sheet, now } from './financeUi'
 
-const KINDS: { value: FinanceKind; label: string }[] = [
+type Tab = FinanceKind | 'savings'
+
+const TABS: { value: Tab; label: string }[] = [
   { value: 'expense', label: 'Трата' },
   { value: 'income', label: 'Доход' },
+  { value: 'savings', label: 'Накопления' },
 ]
 
-/** Ввод и правка операции: сумма → тап по категории сохраняет и закрывает. */
+const TITLES: Record<TransactionKind, string> = {
+  expense: 'Трата', income: 'Доход', save: 'Отложил', withdraw: 'Взял из накоплений',
+}
+
+/**
+ * Ввод и правка операции: у трат и доходов тап по категории сохраняет и закрывает;
+ * у накоплений — выбор «Отложил» / «Взял» и кнопка «Сохранить».
+ */
 export default function TransactionSheet({ initial, today, onClose }: {
   initial: Transaction | null
   today: string
   onClose: () => void
 }) {
-  const [kind, setKind] = useState<FinanceKind>(initial?.kind ?? 'expense')
+  const [tab, setTab] = useState<Tab>(initial && isSavings(initial.kind) ? 'savings' : (initial?.kind as FinanceKind) ?? 'expense')
+  const [direction, setDirection] = useState<SavingsKind>(initial && isSavings(initial.kind) ? initial.kind : 'save')
+  const kind: TransactionKind = tab === 'savings' ? direction : tab
   const [amount, setAmount] = useState(initial ? formatAmount(initial.amount) : '')
   const [day, setDay] = useState(initial?.day ?? today)
   const [note, setNote] = useState(initial?.note ?? '')
@@ -32,7 +45,7 @@ export default function TransactionSheet({ initial, today, onClose }: {
   const cats = useLiveQuery(getFinanceCategories)
   const recent = useLiveQuery(() => listTransactions(addDays(today, -89), today), [today])
   if (!cats || !recent) return null
-  const list = categoriesByUse(recent, cats, kind, today)
+  const list = tab === 'savings' ? [] : categoriesByUse(recent, cats, tab, today)
 
   /** Одна запись за раз: быстрый двойной тап не создаёт вторую операцию. */
   async function write(tx: Transaction, failed: string) {
@@ -47,7 +60,7 @@ export default function TransactionSheet({ initial, today, onClose }: {
     }
   }
 
-  function save(categoryKey: string) {
+  function save(categoryKey = '') {
     let value: number
     try {
       value = parseAmount(amount)
@@ -66,24 +79,42 @@ export default function TransactionSheet({ initial, today, onClose }: {
     void write(deleteTransaction(initial, now()), 'Не удалилось')
   }
 
-  const side = 'min-h-[44px] w-24 text-[16px] text-accent'
+  const side = 'min-h-[44px] w-24 shrink-0 text-[16px] text-accent'
   return (
     <Sheet>
       <div className="flex items-center justify-between gap-2">
-        <button type="button" onClick={onClose} className={`${side} text-left`}>Отмена</button>
         {initial ? (
-          <h2 className="font-serif text-[20px] font-semibold">{kind === 'income' ? 'Доход' : 'Трата'}</h2>
+          <>
+            <button type="button" onClick={onClose} className={`${side} text-left`}>Отмена</button>
+            <h2 className="min-w-0 text-center font-serif text-[20px] leading-tight font-semibold">{TITLES[kind]}</h2>
+            <button type="button" onClick={() => save(initial.categoryKey)} className={`${side} text-right font-semibold`}>
+              Сохранить
+            </button>
+          </>
         ) : (
-          <Segmented label="Вид операции" options={KINDS} value={kind} onChange={setKind} className="w-44" />
-        )}
-        {initial ? (
-          <button type="button" onClick={() => save(initial.categoryKey)} className={`${side} text-right font-semibold`}>
-            Сохранить
-          </button>
-        ) : (
-          <span className="w-24" />
+          <>
+            <button type="button" onClick={onClose} className="min-h-[44px] shrink-0 text-left text-[16px] text-accent">
+              Отмена
+            </button>
+            <Segmented label="Вид операции" options={TABS} value={tab} onChange={setTab} className="flex-1" />
+          </>
         )}
       </div>
+
+      {tab === 'savings' && !initial && (
+        <div role="group" aria-label="Направление" className="grid grid-cols-2 gap-2">
+          {SAVINGS_KINDS.map((k) => (
+            <button
+              key={k} type="button" aria-pressed={direction === k} onClick={() => setDirection(k)}
+              className={`flex min-h-[48px] items-center justify-center gap-2 rounded-[14px] text-[16px] font-semibold ${
+                direction === k ? 'border-2 border-accent bg-accent/15 text-accent' : 'border border-line bg-surface text-ink'
+              }`}
+            >
+              <SavingsIcon kind={k} size={20} />{SAVINGS_LABELS[k]}
+            </button>
+          ))}
+        </div>
+      )}
 
       <label className="flex items-baseline justify-center gap-2 py-1">
         <span className="sr-only">Сумма в рублях</span>
@@ -129,7 +160,13 @@ export default function TransactionSheet({ initial, today, onClose }: {
       )}
       {error && <p role="alert" className="text-center text-[14px] text-danger">{error}</p>}
 
-      {list.length === 0 ? (
+      {tab === 'savings' ? (
+        !initial && (
+          <button type="button" onClick={() => save()} className="min-h-[52px] rounded-[14px] bg-accent text-[17px] font-semibold text-accent-ink">
+            Сохранить
+          </button>
+        )
+      ) : list.length === 0 ? (
         <p className="text-center text-[15px] text-muted">Нет активных категорий — добавьте их в «Настройках».</p>
       ) : (
         <div className="grid grid-cols-3 gap-2">

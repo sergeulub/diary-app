@@ -175,7 +175,7 @@ export default function GoalSheet({ initial, month, goals, data, today, onClose 
                 </select>
               </label>
             )}
-            {form.measure === 'saved' && <p className="text-[14px] text-muted">Доход месяца минус траты месяца.</p>}
+            {form.measure === 'saved' && <p className="text-[14px] text-muted">Отложил минус взял за месяц.</p>}
             {form.measure === 'reviews' && <p className="text-[14px] text-muted">Разборы насмотренности из записей дней месяца.</p>}
             {form.measure === 'metric' && (metrics.length === 0 ? (
               <p className="text-[14px] text-muted">Нет подходящих метрик — добавьте привычку «да / нет» или число в «Настройках».</p>

@@ -1,14 +1,15 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
-import { getFinanceCategories, listTransactions } from '../db/diary'
+import { getFinanceCategories, listAllTransactions, listTransactions } from '../db/diary'
 import { addMonths, monthDiff, monthOf, monthRange } from '../domain/dates'
 import {
-  IMPORTANCES, IMPORTANCE_LABELS, categoryOf, groupByDay, importanceShares, monthSummary,
+  IMPORTANCES, IMPORTANCE_LABELS, SAVINGS_LABELS, categoryOf, groupByDay, importanceShares, isSavings, monthSummary,
+  savingsBalance,
 } from '../domain/finance'
 import { formatMoney } from '../domain/money'
 import { dayGroupTitle, plural } from '../domain/ru'
 import type { Meta, Transaction } from '../domain/types'
-import { IMP_BG, ImpDot, MonthHeader, primeKeyboard } from './financeUi'
+import { IMP_BG, ImpDot, MonthHeader, SavingsBadge, primeKeyboard } from './financeUi'
 import { Card } from './MetricCards'
 import TransactionSheet from './TransactionSheet'
 import { useLogicalToday } from './useLogicalToday'
@@ -28,9 +29,11 @@ export default function FinanceScreen({ meta }: { meta: Meta }) {
   const [from, to] = monthRange(month)
   const txs = useLiveQuery(() => listTransactions(from, to), [from, to])
   const cats = useLiveQuery(getFinanceCategories)
-  if (!txs || !cats) return null
+  const all = useLiveQuery(listAllTransactions)
+  if (!txs || !cats || !all) return null
 
   const s = monthSummary(txs, cats, month)
+  const balance = savingsBalance(all)
   const shares = importanceShares(s.byImportance)
   const groups = groupByDay(txs, month)
   const maxCat = s.expenseByCategory[0]?.amount ?? 0
@@ -53,6 +56,11 @@ export default function FinanceScreen({ meta }: { meta: Meta }) {
               <span className={`text-[18px] font-semibold tabular-nums ${tone}`}>{value}</span>
             </div>
           ))}
+        </div>
+        <div className="flex items-center gap-2.5 border-t border-line pt-3">
+          <SavingsBadge kind="save" />
+          <span className="flex-1 text-[15px]">Всего в накоплениях</span>
+          <span className={`text-[17px] font-semibold tabular-nums ${balance < 0 ? 'text-danger' : ''}`}>{formatMoney(balance)}</span>
         </div>
       </section>
 
@@ -126,6 +134,24 @@ export default function FinanceScreen({ meta }: { meta: Meta }) {
           </div>
           <section className="flex flex-col rounded-[20px] border border-line bg-surface px-4 py-1">
             {g.items.map((t) => {
+              if (isSavings(t.kind)) {
+                const save = t.kind === 'save'
+                return (
+                  <button
+                    key={t.id} type="button" onClick={() => setSheet(t)}
+                    className="flex min-h-[56px] items-center gap-3 border-b border-line py-2 text-left text-[15px] last:border-b-0"
+                  >
+                    <SavingsBadge kind={t.kind} />
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span>{SAVINGS_LABELS[t.kind]}</span>
+                      {t.note && <span className="truncate text-[13px] text-muted">{t.note}</span>}
+                    </span>
+                    <span className={`font-semibold tabular-nums ${save ? 'text-accent' : ''}`}>
+                      {save ? '+' : '−'}{formatMoney(t.amount)}
+                    </span>
+                  </button>
+                )
+              }
               const c = categoryOf(t, cats)
               return (
                 <button

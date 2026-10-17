@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { addMonths, isoWithOffset } from '../domain/dates'
 import { monthTitle } from '../domain/ru'
-import type { Importance } from '../domain/types'
+import type { Importance, SavingsKind } from '../domain/types'
 
 export const now = () => isoWithOffset(new Date())
 
@@ -16,7 +16,29 @@ export function ImpDot({ importance, className = 'size-2.5' }: { importance?: Im
   return <span aria-hidden="true" className={`shrink-0 rounded-full ${importance ? IMP_BG[importance] : 'bg-accent'} ${className}`} />
 }
 
-const Chevron = ({ d }: { d: string }) => (
+/** Лоток со стрелкой: «Отложил» — вниз, в лоток; «Взял» — вверх, из лотка. */
+export function SavingsIcon({ kind, size = 18 }: { kind: SavingsKind; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 13v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" />
+      <path d={kind === 'save' ? 'M12 3v11M8 10l4 4 4-4' : 'M12 14V3M8 7l4-4 4 4'} />
+    </svg>
+  )
+}
+
+/** Круглый значок операции накоплений в списке и карточке месяца. */
+export function SavingsBadge({ kind }: { kind: SavingsKind }) {
+  return (
+    <span className={`flex size-[30px] shrink-0 items-center justify-center rounded-full ${
+      kind === 'save' ? 'bg-accent/15 text-accent' : 'bg-line text-muted'
+    }`}>
+      <SavingsIcon kind={kind} />
+    </span>
+  )
+}
+
+const Chevron =({ d }: { d: string }) => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
     strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
 )
