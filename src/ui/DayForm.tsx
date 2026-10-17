@@ -5,6 +5,7 @@ import { formCards } from '../domain/metrics'
 import type { MetricDefinition, MetricValue } from '../domain/types'
 import { errorText } from './errors'
 import { Card, MetricCard, SleepCard } from './MetricCards'
+import Reviews from './Reviews'
 
 const TEXT_DELAY_MS = 500
 
@@ -112,6 +113,7 @@ function DayFormBody({ day, defs, initial }: { day: string; defs: MetricDefiniti
           className="min-h-[160px] shrink-0 grow resize-none bg-transparent text-[16px] leading-[1.55] text-ink outline-none placeholder:text-muted"
         />
       </Card>
+      <Reviews day={day} />
       {error && <p className="text-[13px] text-danger">{error}</p>}
     </div>
   )

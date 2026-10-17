@@ -77,7 +77,7 @@ export function Segmented<T extends string>({ label, options, value, onChange, c
       {options.map((o) => (
         <button
           key={o.value} type="button" aria-pressed={o.value === value} onClick={() => onChange(o.value)}
-          className={`min-h-[36px] rounded-[10px] px-2 text-[14px] ${
+          className={`min-h-[36px] rounded-[10px] ${options.length > 4 ? 'px-0 text-[12px] tracking-[-0.01em]' : 'px-2 text-[14px]'} ${
             o.value === value ? 'bg-surface font-semibold text-ink shadow-sm' : 'font-medium text-muted'
           }`}
         >

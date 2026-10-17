@@ -17,6 +17,7 @@ const MEASURES: { value: TargetMeasure; label: string }[] = [
   { value: 'income', label: 'Доход' },
   { value: 'saved', label: 'Отложено' },
   { value: 'metric', label: 'Привычка' },
+  { value: 'reviews', label: 'Разборы' },
 ]
 const OPS: { value: GoalOp; label: string }[] = [
   { value: 'le', label: 'не больше' },
@@ -47,8 +48,8 @@ export default function GoalSheet({ initial, month, goals, data, today, onClose 
   const metricDef = data.metricDefinitions.find((d) => d.key === form.metricKey)
   const aggregates = metricDef ? allowedAggregates(metricDef.type) : []
   const cats = activeCategories(data.financeCategories, form.measure === 'income' ? 'income' : 'expense')
-  const isFinance = form.measure !== 'metric'
-  const suffix = isFinance ? '₽' : form.aggregate === 'count' ? 'дн.' : (metricDef?.unit ?? '')
+  const isFinance = form.measure !== 'metric' && form.measure !== 'reviews'
+  const suffix = isFinance ? '₽' : form.measure === 'reviews' ? '' : form.aggregate === 'count' ? 'дн.' : (metricDef?.unit ?? '')
 
   let draft: GoalTarget | null = null
   try {
@@ -63,6 +64,7 @@ export default function GoalSheet({ initial, month, goals, data, today, onClose 
     const first = metrics[0]
     set({
       measure, filter: '',
+      ...(measure === 'reviews' ? { op: 'ge' as const } : {}),
       ...(measure === 'metric' && !form.metricKey && first ? { metricKey: first.key, aggregate: allowedAggregates(first.type)[0] } : {}),
     })
   }
@@ -174,6 +176,7 @@ export default function GoalSheet({ initial, month, goals, data, today, onClose 
               </label>
             )}
             {form.measure === 'saved' && <p className="text-[14px] text-muted">Доход месяца минус траты месяца.</p>}
+            {form.measure === 'reviews' && <p className="text-[14px] text-muted">Разборы насмотренности из записей дней месяца.</p>}
             {form.measure === 'metric' && (metrics.length === 0 ? (
               <p className="text-[14px] text-muted">Нет подходящих метрик — добавьте привычку «да / нет» или число в «Настройках».</p>
             ) : (
@@ -205,7 +208,7 @@ export default function GoalSheet({ initial, month, goals, data, today, onClose 
                 <span className="text-[15px] text-muted">{suffix}</span>
               </label>
             </div>
-            {draft && preview && (
+            {draft && preview && draft.kind !== 'reviews' && (
               <p className="text-[13px] text-muted">
                 Сейчас: {formatGoalValue(draft, preview.value, data.metricDefinitions)} — {GOAL_STATE_LABELS[preview.state]}
               </p>

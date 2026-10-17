@@ -1,6 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
-import { getFinanceCategories, getMetrics, listDays, listGoals, listTransactions } from '../db/diary'
+import {
+  getFinanceCategories, getMetrics, listDays, listEntries, listGoals, listPhotosBetween, listTransactions,
+} from '../db/diary'
 import { addMonths, monthDiff, monthOf, monthRange } from '../domain/dates'
 import {
   AREA_LABELS, GOAL_STATE_LABELS, goalDetail, goalProgress, goalsOfMonth, progressPercent,
@@ -39,11 +41,13 @@ export default function GoalsScreen({ meta }: { meta: Meta }) {
   const goals = useLiveQuery(() => listGoals(month), [month])
   const transactions = useLiveQuery(() => listTransactions(from, to), [from, to])
   const days = useLiveQuery(() => listDays(from, to), [from, to])
+  const entries = useLiveQuery(() => listEntries(from, to), [from, to])
+  const photos = useLiveQuery(() => listPhotosBetween(from, to), [from, to])
   const financeCategories = useLiveQuery(getFinanceCategories)
   const metricDefinitions = useLiveQuery(getMetrics)
-  if (!goals || !transactions || !days || !financeCategories || !metricDefinitions) return null
+  if (!goals || !transactions || !days || !entries || !photos || !financeCategories || !metricDefinitions) return null
 
-  const data: ProgressData = { transactions, financeCategories, days, metricDefinitions }
+  const data: ProgressData = { transactions, financeCategories, days, metricDefinitions, entries, photos }
   const list = goalsOfMonth(goals, month)
 
   return (
