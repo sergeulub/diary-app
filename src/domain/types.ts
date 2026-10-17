@@ -29,11 +29,30 @@ export interface DayRecord {
   completedAt?: string
 }
 
-/** Заготовка под дневную ленту; в MVP пустая. */
+/**
+ * Запись внутри дня. Сейчас — только разборы насмотренности (kind: 'review'):
+ * text — «что это, для кого, что обещает», verdict — «работает ли и почему», change — «как сделал бы сам».
+ */
 export interface EntryRecord {
   id: string
   day: string
+  kind?: 'review'
   text: string
+  verdict?: string
+  change?: string
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+/** Фото к записи. Удалённое хранит пустые bytes. */
+export interface PhotoRecord {
+  id: string
+  entryId: string
+  /** Логический день записи. */
+  day: string
+  type: string
+  bytes: Uint8Array
   createdAt: string
   updatedAt: string
   deletedAt: string | null
@@ -52,6 +71,7 @@ export interface DiarySnapshot {
   financeCategories: FinanceCategory[]
   transactions: Transaction[]
   goals: Goal[]
+  photos: PhotoRecord[]
   meta: Meta
 }
 
@@ -101,6 +121,8 @@ export type GoalTarget =
       value: number
     }
   | { kind: 'metric'; metricKey: string; aggregate: GoalAggregate; op: GoalOp; value: number }
+  /** Число непустых разборов за месяц. */
+  | { kind: 'reviews'; op: GoalOp; value: number }
 
 export interface Goal {
   id: string

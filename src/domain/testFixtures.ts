@@ -1,4 +1,4 @@
-import type { DayRecord, Goal, Transaction } from './types'
+import type { DayRecord, EntryRecord, Goal, PhotoRecord, Transaction } from './types'
 
 export const T0 = '2026-10-01T22:00:00.000+03:00'
 
@@ -20,6 +20,22 @@ export function txRec(day: string, patch: Partial<Transaction> = {}): Transactio
 export function goalRec(month: string, patch: Partial<Goal> = {}): Goal {
   return {
     id: `goal-${++seq}`, month, text: 'Цель', area: 'other', order: 1,
+    createdAt: T0, updatedAt: T0, deletedAt: null, ...patch,
+  }
+}
+
+/** Пустой разбор дня. */
+export function reviewRec(day: string, patch: Partial<EntryRecord> = {}): EntryRecord {
+  return {
+    id: `entry-${++seq}`, day, kind: 'review', text: '', verdict: '', change: '',
+    createdAt: T0, updatedAt: T0, deletedAt: null, ...patch,
+  }
+}
+
+/** Живое фото записи из трёх байтов. */
+export function photoRec(entryId: string, patch: Partial<PhotoRecord> = {}): PhotoRecord {
+  return {
+    id: `photo-${++seq}`, entryId, day: '2026-10-17', type: 'image/jpeg', bytes: new Uint8Array([1, 2, 3]),
     createdAt: T0, updatedAt: T0, deletedAt: null, ...patch,
   }
 }

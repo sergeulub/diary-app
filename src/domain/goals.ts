@@ -1,10 +1,11 @@
 import { monthOf } from './dates'
 import { IMPORTANCES, categoryOf, liveTransactions } from './finance'
 import { formatAmount, formatMoney, parseAmount } from './money'
+import { countReviews } from './reviews'
 import { plural } from './ru'
 import type {
-  DayRecord, FinanceCategory, Goal, GoalAggregate, GoalArea, GoalOp, GoalTarget, Importance, MetricDefinition, MetricType,
-  Transaction,
+  DayRecord, EntryRecord, FinanceCategory, Goal, GoalAggregate, GoalArea, GoalOp, GoalTarget, Importance, MetricDefinition,
+  MetricType, PhotoRecord, Transaction,
 } from './types'
 
 export const AREA_LABELS: Record<GoalArea, string> = {
@@ -60,6 +61,7 @@ export function isGoalTarget(x: unknown): x is GoalTarget {
   if (x.kind === 'metric') {
     return typeof x.metricKey === 'string' && x.metricKey !== '' && ['count', 'sum', 'avg'].includes(x.aggregate as string)
   }
+  if (x.kind === 'reviews') return Number.isInteger(x.value) && x.value >= 0
   return false
 }
 
@@ -128,6 +130,8 @@ export interface ProgressData {
   financeCategories: FinanceCategory[]
   days: DayRecord[]
   metricDefinitions: MetricDefinition[]
+  entries: EntryRecord[]
+  photos: PhotoRecord[]
 }
 
 export interface GoalProgress {
@@ -153,6 +157,7 @@ function measure(month: string, t: GoalTarget, data: ProgressData): number | nul
         .reduce((s, x) => s + x.amount, 0)
     return t.measure === 'saved' ? total('income') - total('expense') : total(t.measure)
   }
+  if (t.kind === 'reviews') return countReviews(data.entries, data.photos, month)
   const values = data.days
     .filter((d) => !d.deletedAt && monthOf(d.day) === month)
     .map((d) => d.metrics[t.metricKey])
@@ -190,10 +195,12 @@ export function goalProgress(goal: Goal, data: ProgressData, today: string): Goa
 }
 
 const decimal = (n: number) => String(Math.round(n * 10) / 10).replace('.', ',')
+const REVIEWS: [string, string, string] = ['разбор', 'разбора', 'разборов']
 
 export function formatGoalValue(target: GoalTarget, value: number | null, defs: MetricDefinition[]): string {
   if (value === null) return 'нет данных'
   if (target.kind === 'finance') return formatMoney(value)
+  if (target.kind === 'reviews') return `${value} ${plural(value, REVIEWS)}`
   if (target.aggregate === 'count') return `${value} ${plural(value, ['день', 'дня', 'дней'])}`
   const unit = defs.find((d) => d.key === target.metricKey)?.unit
   const num = decimal(value)
@@ -213,13 +220,14 @@ const DAYS: [string, string, string] = ['день', 'дня', 'дней']
 
 function amountOf(t: GoalTarget, n: number, defs: MetricDefinition[]): string {
   if (t.kind === 'finance') return formatMoney(n)
-  if (t.aggregate === 'count') return String(n)
+  if (t.kind === 'reviews' || t.aggregate === 'count') return String(n)
   const unit = defs.find((d) => d.key === t.metricKey)?.unit
   return unit ? `${decimal(n)} ${unit}` : decimal(n)
 }
 
 function valuePair(t: GoalTarget, value: number, target: number, defs: MetricDefinition[]): string {
   if (t.kind === 'finance') return `${formatAmount(value)} из ${formatMoney(target)}`
+  if (t.kind === 'reviews') return `${value} из ${target} ${plural(target, REVIEWS)}`
   if (t.aggregate === 'count') return `${value} из ${target} ${plural(target, DAYS)}`
   return `${decimal(value)} из ${amountOf(t, target, defs)}`
 }
@@ -236,7 +244,7 @@ export function goalDetail(goal: Goal, p: GoalProgress | null, defs: MetricDefin
   return pair
 }
 
-export type TargetMeasure = 'expense' | 'income' | 'saved' | 'metric'
+export type TargetMeasure = 'expense' | 'income' | 'saved' | 'metric' | 'reviews'
 
 /** Поля формы «Измерять». filter: '' — без фильтра, 'cat:<ключ>', 'imp:<уровень>'. */
 export interface TargetForm {
@@ -252,10 +260,14 @@ export const EMPTY_TARGET_FORM: TargetForm = { measure: 'expense', filter: '', m
 
 /** Измерение из полей формы; ошибка — с текстом для пользователя. */
 export function targetFromForm(f: TargetForm): GoalTarget {
-  if (f.measure === 'metric') {
-    if (!f.metricKey) throw new Error('Выберите привычку или метрику')
+  if (f.measure === 'metric' || f.measure === 'reviews') {
+    if (f.measure === 'metric' && !f.metricKey) throw new Error('Выберите привычку или метрику')
     const value = Number(f.value.replace(/\s/g, '').replace(',', '.'))
     if (!f.value.trim() || !Number.isFinite(value) || value < 0) throw new Error('Введите число, например 12')
+    if (f.measure === 'reviews') {
+      if (!Number.isInteger(value)) throw new Error('Введите число, например 12')
+      return { kind: 'reviews', op: f.op, value }
+    }
     return { kind: 'metric', metricKey: f.metricKey, aggregate: f.aggregate, op: f.op, value }
   }
   const value = parseAmount(f.value)
@@ -267,6 +279,7 @@ export function targetFromForm(f: TargetForm): GoalTarget {
 
 export function formFromTarget(t: GoalTarget | undefined): TargetForm {
   if (!t) return EMPTY_TARGET_FORM
+  if (t.kind === 'reviews') return { ...EMPTY_TARGET_FORM, measure: 'reviews', op: t.op, value: String(t.value) }
   if (t.kind === 'metric') {
     return { ...EMPTY_TARGET_FORM, measure: 'metric', metricKey: t.metricKey, aggregate: t.aggregate, op: t.op, value: String(t.value).replace('.', ',') }
   }

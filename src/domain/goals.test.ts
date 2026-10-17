@@ -6,7 +6,7 @@ import {
   type GoalProgress, type ProgressData,
 } from './goals'
 import { DEFAULT_METRICS } from './metrics'
-import { T0, dayRec, goalRec, txRec } from './testFixtures'
+import { T0, dayRec, goalRec, photoRec, reviewRec, txRec } from './testFixtures'
 import type { GoalTarget, MetricDefinition } from './types'
 
 const NOW = '2026-11-02T21:00:00.000+03:00'
@@ -17,7 +17,7 @@ const defs: MetricDefinition[] = [
   { key: 'm2', name: 'Чтение', type: 'number', unit: 'мин', order: 6, ...habit },
 ]
 const data = (patch: Partial<ProgressData> = {}): ProgressData => ({
-  transactions: [], financeCategories: DEFAULT_CATEGORIES, days: [], metricDefinitions: defs, ...patch,
+  transactions: [], financeCategories: DEFAULT_CATEGORIES, days: [], metricDefinitions: defs, entries: [], photos: [], ...patch,
 })
 
 describe('isGoalTarget', () => {
@@ -31,6 +31,9 @@ describe('isGoalTarget', () => {
     ['дробные копейки', { kind: 'finance', measure: 'expense', op: 'le', value: 10.5 }, false],
     ['неизвестное условие', { kind: 'metric', metricKey: 'm1', aggregate: 'count', op: 'eq', value: 1 }, false],
     ['неизвестный агрегат', { kind: 'metric', metricKey: 'm1', aggregate: 'max', op: 'ge', value: 1 }, false],
+    ['разборы', { kind: 'reviews', op: 'ge', value: 12 }, true],
+    ['разборы — дробь', { kind: 'reviews', op: 'ge', value: 1.5 }, false],
+    ['разборы — меньше нуля', { kind: 'reviews', op: 'ge', value: -1 }, false],
     ['не объект', 'Кафе ≤ 5000', false],
   ])('%s', (_, x, ok) => {
     expect(isGoalTarget(x)).toBe(ok)
@@ -147,6 +150,20 @@ describe('goalProgress', () => {
     expect(goalProgress(boredom, data(), '2026-11-10')?.state).toBe('progress')
     expect(goalProgress(boredom, data(), '2026-12-01')).toEqual({ value: null, target: 2, remaining: null, state: 'missed' })
   })
+  it('разборы: непустые живые разборы месяца', () => {
+    const goal = goalRec('2026-11', { target: { kind: 'reviews', op: 'ge', value: 12 } })
+    const photoOnly = reviewRec('2026-11-05')
+    const entries = [
+      reviewRec('2026-11-01', { text: 'Йогурт' }),
+      reviewRec('2026-11-02', { verdict: 'Работает' }),
+      photoOnly,
+      reviewRec('2026-11-06'), // пустой
+      reviewRec('2026-11-07', { text: 'Кофе', deletedAt: NOW }),
+      reviewRec('2026-10-31', { text: 'Чипсы' }),
+    ]
+    const photos = [photoRec(photoOnly.id)]
+    expect(goalProgress(goal, data({ entries, photos }), '2026-11-17')).toEqual({ value: 3, target: 12, remaining: 9, state: 'progress' })
+  })
 })
 
 describe('formatGoalValue', () => {
@@ -156,6 +173,8 @@ describe('formatGoalValue', () => {
     [{ kind: 'metric', metricKey: 'm2', aggregate: 'sum', op: 'ge', value: 0 }, 75, '75 мин'],
     [{ kind: 'metric', metricKey: 'mood', aggregate: 'avg', op: 'ge', value: 0 }, 3.456, '3,5'],
     [{ kind: 'metric', metricKey: 'mood', aggregate: 'avg', op: 'ge', value: 0 }, null, 'нет данных'],
+    [{ kind: 'reviews', op: 'ge', value: 12 }, 5, '5 разборов'],
+    [{ kind: 'reviews', op: 'ge', value: 12 }, 1, '1 разбор'],
   ])('%j, %s → «%s»', (target, value, text) => {
     expect(formatGoalValue(target, value, defs)).toBe(text)
   })
@@ -185,6 +204,9 @@ describe('подписи прогресса', () => {
     expect(goalDetail(met('m2', 'sum', 600), p(75, 600, 525, 'progress'), defs)).toBe('75 из 600 мин · осталось 525 мин')
     expect(goalDetail(met('mood', 'avg', 3.5), p(null, 3.5, null, 'progress'), defs)).toBe('Пока нет данных')
     expect(goalDetail(goalRec('2026-11'), null, defs)).toBe('Без измерения — сверит Claude по записям дней')
+    const reviews = goalRec('2026-11', { target: { kind: 'reviews', op: 'ge', value: 12 } })
+    expect(goalDetail(reviews, p(5, 12, 7, 'progress'), defs)).toBe('5 из 12 разборов · осталось 7')
+    expect(goalDetail(reviews, p(12, 12, 0, 'done'), defs)).toBe('12 из 12 разборов')
   })
 })
 
@@ -210,6 +232,7 @@ describe('форма измерения цели', () => {
     expect(() => targetFromForm(form({ measure: 'metric', value: '12' }))).toThrow('Выберите привычку или метрику')
     expect(() => targetFromForm(form({ measure: 'metric', metricKey: 'm1', value: 'много' }))).toThrow('Введите число, например 12')
     expect(() => targetFromForm(form({ measure: 'metric', metricKey: 'm1', value: '-1' }))).toThrow('Введите число, например 12')
+    expect(() => targetFromForm(form({ measure: 'reviews', value: '2,5' }))).toThrow('Введите число, например 12')
   })
   it('formFromTarget → targetFromForm возвращает то же измерение', () => {
     const targets: GoalTarget[] = [
@@ -218,6 +241,7 @@ describe('форма измерения цели', () => {
       { kind: 'finance', measure: 'saved', op: 'ge', value: 3000000 },
       { kind: 'metric', metricKey: 'm2', aggregate: 'sum', op: 'ge', value: 600 },
       { kind: 'metric', metricKey: 'mood', aggregate: 'avg', op: 'ge', value: 3.5 },
+      { kind: 'reviews', op: 'ge', value: 12 },
     ]
     for (const t of targets) expect(targetFromForm(formFromTarget(t))).toEqual(t)
     expect(formFromTarget(undefined)).toEqual(EMPTY_TARGET_FORM)
