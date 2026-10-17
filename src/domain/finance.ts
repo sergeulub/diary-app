@@ -1,7 +1,7 @@
 import { addDays, monthOf } from './dates'
 import { SEED_TIME } from './metrics'
 import { MAX_AMOUNT } from './money'
-import type { FinanceCategory, FinanceKind, Importance, Transaction } from './types'
+import type { FinanceCategory, FinanceKind, Importance, SavingsKind, Transaction, TransactionKind } from './types'
 
 export const IMPORTANCE_LABELS: Record<Importance, string> = {
   need: 'Необходимо',
@@ -100,8 +100,12 @@ export function setCategoryArchived(
   return { ...cat, archived, updatedAt: now, ...(archived ? {} : { order: maxOrder(cats, cat.kind) + 1 }) }
 }
 
+export const SAVINGS_KINDS: SavingsKind[] = ['save', 'withdraw']
+export const isSavings = (kind: TransactionKind): kind is SavingsKind => kind === 'save' || kind === 'withdraw'
+export const SAVINGS_LABELS: Record<SavingsKind, string> = { save: 'Отложил', withdraw: 'Взял' }
+
 export interface TransactionInput {
-  kind: FinanceKind
+  kind: TransactionKind
   amount: number
   categoryKey: string
   day: string
@@ -119,13 +123,15 @@ const cleanNote = (note?: string) => note?.replace(/\s+/g, ' ').trim()
 
 export function createTransaction(input: TransactionInput, now: string): Transaction {
   checkAmount(input.amount)
+  const savings = isSavings(input.kind)
+  if (!savings && !input.categoryKey) throw new Error('Не выбрана категория')
   const note = cleanNote(input.note)
   return {
     id: crypto.randomUUID(),
     day: input.day,
     kind: input.kind,
     amount: input.amount,
-    categoryKey: input.categoryKey,
+    categoryKey: savings ? '' : input.categoryKey,
     ...(note ? { note } : {}),
     createdAt: now,
     updatedAt: now,
@@ -186,7 +192,7 @@ export function totalsByCategory(txs: Transaction[], cats: FinanceCategory[]): C
 export interface MonthSummary {
   income: number
   expense: number
-  /** income − expense, может быть < 0. */
+  /** «Отложил» − «Взял» за месяц, может быть < 0. */
   saved: number
   byImportance: Record<Importance, number>
   expenseByCategory: CategoryTotal[]
@@ -194,6 +200,13 @@ export interface MonthSummary {
 }
 
 const sum = (txs: Transaction[]) => txs.reduce((s, t) => s + t.amount, 0)
+
+/** «Отложил» − «Взял» по живым операциям списка. */
+const netSaved = (txs: Transaction[]) =>
+  liveTransactions(txs).reduce((s, t) => s + (t.kind === 'save' ? t.amount : t.kind === 'withdraw' ? -t.amount : 0), 0)
+
+/** Всего в накоплениях за всё время, может быть < 0. */
+export const savingsBalance = (txs: Transaction[]) => netSaved(txs)
 
 export function monthSummary(txs: Transaction[], cats: FinanceCategory[], month: string): MonthSummary {
   const inMonth = liveTransactions(txs).filter((t) => monthOf(t.day) === month)
@@ -206,7 +219,7 @@ export function monthSummary(txs: Transaction[], cats: FinanceCategory[], month:
   return {
     income,
     expense,
-    saved: income - expense,
+    saved: netSaved(inMonth),
     byImportance,
     expenseByCategory: totalsByCategory(expenses, cats),
     incomeByCategory: totalsByCategory(incomes, cats),
@@ -272,7 +285,7 @@ export function groupByDay(txs: Transaction[], month: string): DayGroup[] {
   for (const t of liveTransactions(txs)) {
     if (monthOf(t.day) !== month) continue
     const g = map.get(t.day) ?? { day: t.day, expense: 0, income: 0, items: [] }
-    g[t.kind] += t.amount
+    if (!isSavings(t.kind)) g[t.kind] += t.amount
     g.items.push(t)
     map.set(t.day, g)
   }

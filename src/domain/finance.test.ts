@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_CATEGORIES, activeCategories, categoriesByUse, createCategory, createTransaction, dayTotals,
-  deleteTransaction, groupByDay, importanceShares, monthSummary, moveCategory, nextImportance, setCategoryArchived,
-  updateCategory, updateTransaction,
+  deleteTransaction, groupByDay, importanceShares, monthSummary, moveCategory, nextImportance, savingsBalance,
+  setCategoryArchived, updateCategory, updateTransaction,
 } from './finance'
 import { SEED_TIME } from './metrics'
 import { T0, txRec } from './testFixtures'
@@ -111,8 +111,8 @@ describe('итоги', () => {
   ]
   const s = monthSummary(txs, cats, '2026-11')
 
-  it('доход, траты, отложено', () => {
-    expect([s.income, s.expense, s.saved]).toEqual([5_000_000, 260000, 4_740_000])
+  it('доход, траты; без операций накоплений «отложено» = 0', () => {
+    expect([s.income, s.expense, s.saved]).toEqual([5_000_000, 260000, 0])
   })
   it('траты по важности; неизвестная категория — «Полезно»', () => {
     expect(s.byImportance).toEqual({ need: 80000, useful: 105000, optional: 75000 })
@@ -126,9 +126,6 @@ describe('итоги', () => {
   it('архивная категория остаётся в итогах', () => {
     const archived = cats.map((c) => (c.key === 'cafe' ? { ...c, archived: true } : c))
     expect(monthSummary(txs, archived, '2026-11').byImportance.optional).toBe(75000)
-  })
-  it('траты больше дохода — отрицательное «отложено»', () => {
-    expect(monthSummary([txRec('2026-11-02', { amount: 100 })], cats, '2026-11').saved).toBe(-100)
   })
   it('dayTotals — живые операции дня', () => {
     expect(dayTotals(txs, '2026-11-02')).toEqual({ income: 0, expense: 125000, count: 2, expenseCount: 2 })
@@ -176,5 +173,40 @@ describe('для экранов', () => {
     const t = createTransaction({ kind: 'expense', amount: 100, categoryKey: 'cafe', day: '2026-11-02', note: ' кофе\nс  Машей ' }, NOW)
     expect(t.note).toBe('кофе с Машей')
     expect(updateTransaction(t, { note: 'обед\r\nс коллегами' }, NOW).note).toBe('обед с коллегами')
+  })
+})
+
+describe('накопления', () => {
+  const ops = [
+    txRec('2026-11-02', { kind: 'income', categoryKey: 'salary', amount: 5_000_000 }),
+    txRec('2026-11-03', { amount: 260000 }),
+    txRec('2026-11-05', { kind: 'save', categoryKey: '', amount: 1_000_000 }),
+    txRec('2026-11-07', { kind: 'withdraw', categoryKey: '', amount: 300000 }),
+    txRec('2026-10-20', { kind: 'save', categoryKey: '', amount: 500000 }),
+    txRec('2026-11-08', { kind: 'save', categoryKey: '', amount: 999, deletedAt: T0 }),
+  ]
+  it('«Отложено» месяца — отложил минус взял, доход и траты без накоплений', () => {
+    const s = monthSummary(ops, cats, '2026-11')
+    expect([s.income, s.expense, s.saved]).toEqual([5_000_000, 260000, 700000])
+    expect(s.byImportance.need + s.byImportance.useful + s.byImportance.optional).toBe(260000)
+    expect(s.expenseByCategory.map((c) => c.key)).not.toContain('')
+    expect(s.incomeByCategory.map((c) => c.key)).not.toContain('')
+  })
+  it('взял больше, чем отложил, — отрицательно', () => {
+    const take = [txRec('2026-11-07', { kind: 'withdraw', categoryKey: '', amount: 300 })]
+    expect(monthSummary(take, cats, '2026-11').saved).toBe(-300)
+    expect(savingsBalance(take)).toBe(-300)
+  })
+  it('баланс за всё время без удалённых', () => expect(savingsBalance(ops)).toBe(1_200_000))
+  it('сумма трат дня и группы без накоплений', () => {
+    const day = [txRec('2026-11-05', { amount: 100 }), txRec('2026-11-05', { kind: 'save', categoryKey: '', amount: 5000 })]
+    expect(dayTotals(day, '2026-11-05')).toMatchObject({ income: 0, expense: 100, expenseCount: 1 })
+    expect(groupByDay(day, '2026-11')[0]).toMatchObject({ expense: 100, income: 0 })
+    expect(groupByDay(day, '2026-11')[0].items).toHaveLength(2)
+  })
+  it('createTransaction: у накоплений категория пустая, у трат обязательна', () => {
+    expect(createTransaction({ kind: 'save', amount: 100, categoryKey: 'x', day: '2026-11-05' }, T0).categoryKey).toBe('')
+    expect(() => createTransaction({ kind: 'expense', amount: 100, categoryKey: '', day: '2026-11-05' }, T0))
+      .toThrow('Не выбрана категория')
   })
 })

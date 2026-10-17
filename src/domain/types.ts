@@ -76,6 +76,9 @@ export interface DiarySnapshot {
 }
 
 export type FinanceKind = 'expense' | 'income'
+/** Операции накоплений: «Отложил» и «Взял». Не доход и не траты, категории нет. */
+export type SavingsKind = 'save' | 'withdraw'
+export type TransactionKind = FinanceKind | SavingsKind
 /** Важность категории трат: необходимо / полезно / можно без этого. */
 export type Importance = 'need' | 'useful' | 'optional'
 
@@ -95,10 +98,11 @@ export interface Transaction {
   id: string
   /** Логический день ГГГГ-ММ-ДД. */
   day: string
-  /** Совпадает с kind категории. */
-  kind: FinanceKind
+  /** У доходов и трат совпадает с kind категории. */
+  kind: TransactionKind
   /** Целые копейки, > 0. */
   amount: number
+  /** У накоплений — пустая строка. */
   categoryKey: string
   note?: string
   createdAt: string

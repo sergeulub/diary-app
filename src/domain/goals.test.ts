@@ -118,8 +118,13 @@ describe('goalProgress', () => {
     })
     expect(goalProgress(optional, data({ transactions: txs }), '2026-11-10')?.value).toBe(420000)
     const saved = goalRec('2026-11', { target: { kind: 'finance', measure: 'saved', op: 'ge', value: 4_000_000 } })
-    expect(goalProgress(saved, data({ transactions: txs }), '2026-11-10')).toEqual({
-      value: 4_080_000, target: 4_000_000, remaining: 0, state: 'done',
+    const savings = [
+      ...txs,
+      txRec('2026-11-05', { kind: 'save', categoryKey: '', amount: 1_000_000 }),
+      txRec('2026-11-07', { kind: 'withdraw', categoryKey: '', amount: 300000 }),
+    ]
+    expect(goalProgress(saved, data({ transactions: savings }), '2026-11-10')).toEqual({
+      value: 700000, target: 4_000_000, remaining: 3_300_000, state: 'progress',
     })
   })
   it('≥ не набрано — «в процессе», после конца месяца — «не выполнено»', () => {
