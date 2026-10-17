@@ -1,19 +1,32 @@
-import { strToU8, zipSync } from 'fflate'
+import { strToU8, zipSync, type Zippable } from 'fflate'
 import { isLater, isoWithOffset, monthOf } from './dates'
 import { liveTransactions, totalsByCategory } from './finance'
 import { AREA_LABELS, GOAL_STATE_LABELS, formatGoalValue, goalProgress, goalsOfMonth } from './goals'
 import { formatDate, logicalDay } from './logicalDay'
 import { SCALE_LABELS, isDayFilled, sortMetrics } from './metrics'
 import { formatAmount, formatMoney } from './money'
+import { isReviewEmpty, livePhotos, reviewsOfDay } from './reviews'
 import { monthName, weekdayName } from './ru'
 import { formatDuration, sleepDuration } from './sleep'
-import type { DayRecord, DiarySnapshot, FinanceCategory, MetricDefinition, MetricValue, Transaction } from './types'
+import type {
+  DayRecord, DiarySnapshot, EntryRecord, FinanceCategory, MetricDefinition, MetricValue, PhotoRecord, Transaction,
+} from './types'
 
-export const FORMAT_VERSION = 2
+export const FORMAT_VERSION = 3
 
-export interface Backup extends DiarySnapshot {
+/** Фото в backup.json — без байтов; file — путь в zip, у удалённого null. */
+export type PhotoMeta = Omit<PhotoRecord, 'bytes'> & { file: string | null }
+
+export interface Backup extends Omit<DiarySnapshot, 'photos'> {
   formatVersion: number
   exportedAt: string
+  photos: PhotoMeta[]
+}
+
+export const photoPath = (id: string) => `photos/${id}.jpg`
+
+function photoMeta({ bytes: _bytes, ...rest }: PhotoRecord): PhotoMeta {
+  return { ...rest, file: rest.deletedAt ? null : photoPath(rest.id) }
 }
 
 export function buildBackup(s: DiarySnapshot, exportedAt: string): Backup {
@@ -26,24 +39,33 @@ export function buildBackup(s: DiarySnapshot, exportedAt: string): Backup {
     financeCategories: s.financeCategories,
     transactions: s.transactions,
     goals: s.goals,
+    photos: s.photos.map(photoMeta),
     meta: s.meta,
   }
 }
 
+/** Непустые живые разборы дня по порядку. */
+const reviewsForExport = (s: DiarySnapshot, day: string) =>
+  reviewsOfDay(s.entries, day).filter((e) => !isReviewEmpty(e, s.photos))
+
 /**
- * Дни для Markdown: после прошлого экспорта (первый — все) изменилась запись дня или любая его операция,
- * и в дне есть что показать — заполненная запись или живые операции. По возрастанию даты.
+ * Дни для Markdown: после прошлого экспорта (первый — все) изменилась запись дня, любая его операция или разбор,
+ * и в дне есть что показать — заполненная запись, живые операции или непустой разбор. По возрастанию даты.
  */
 export function selectChangedDays(s: DiarySnapshot): string[] {
   const since = s.meta.lastExportAt
   const changed = (x: { updatedAt: string }) => since === null || isLater(x.updatedAt, since)
-  const candidates = new Set([...s.days.filter(changed).map((d) => d.day), ...s.transactions.filter(changed).map((t) => t.day)])
+  const candidates = new Set([
+    ...s.days.filter(changed).map((d) => d.day),
+    ...s.transactions.filter(changed).map((t) => t.day),
+    ...s.entries.filter(changed).map((e) => e.day),
+  ])
   const records = new Map(s.days.map((d) => [d.day, d]))
   const withLive = new Set(liveTransactions(s.transactions).map((t) => t.day))
   return [...candidates]
     .filter((day) => {
       const rec = records.get(day)
-      return (rec !== undefined && isDayFilled(rec)) || withLive.has(day)
+      return (rec !== undefined && isDayFilled(rec)) || withLive.has(day) || reviewsForExport(s, day).length > 0
     })
     .sort()
 }
@@ -99,6 +121,26 @@ export function financeLines(txs: Transaction[], cats: FinanceCategory[]): strin
   return lines
 }
 
+const REVIEW_FIELDS: [keyof Pick<EntryRecord, 'text' | 'verdict' | 'change'>, string][] = [
+  ['text', 'Что это'],
+  ['verdict', 'Работает ли'],
+  ['change', 'Как сделал бы сам'],
+]
+
+/** Блоки «### Разбор N» дня; пустые поля пропускаются, фото — путями в zip. */
+export function reviewLines(reviews: EntryRecord[], photos: PhotoRecord[]): string[] {
+  return reviews.flatMap((r, i) => {
+    const lines = ['', `### Разбор ${i + 1}`]
+    for (const [key, label] of REVIEW_FIELDS) {
+      const value = r[key]?.trim()
+      if (value) lines.push(`**${label}:** ${value}`)
+    }
+    const files = livePhotos(photos, r.id).map((p) => photoPath(p.id))
+    if (files.length) lines.push(`Фото: ${files.join(', ')}`)
+    return lines
+  })
+}
+
 /** Раздел «# Цели — ноябрь 2026»; у месяца без живых целей — пустая строка. */
 export function goalsSection(s: DiarySnapshot, month: string, today: string): string {
   const goals = goalsOfMonth(s.goals, month)
@@ -127,6 +169,7 @@ export function renderMarkdown(s: DiarySnapshot, days: string[], today: string):
     lines.push(...financeLines(s.transactions.filter((t) => t.day === day), s.financeCategories))
     const text = live?.text.trim() ?? ''
     if (text) lines.push('', text)
+    lines.push(...reviewLines(reviewsForExport(s, day), s.photos))
     return lines.join('\n') + '\n'
   })
   return [...goals, ...blocks].join('\n')
@@ -138,9 +181,13 @@ export function buildExportZip(s: DiarySnapshot, now: Date): { fileName: string;
   const from = changed[0] ?? today
   const to = changed[changed.length - 1] ?? today
   const backup = buildBackup(s, isoWithOffset(now))
+  // JPEG уже сжат: кладём без повторного сжатия
+  const photos: Zippable = {}
+  for (const p of s.photos) if (!p.deletedAt) photos[photoPath(p.id)] = [p.bytes, { level: 0 }]
   const bytes = zipSync({
     'backup.json': strToU8(JSON.stringify(backup, null, 2)),
     [`entries_${from}_${to}.md`]: strToU8(renderMarkdown(s, changed, logicalDay(now, s.meta.boundaryHour))),
+    ...photos,
   })
   return { fileName: `diary-${today}.zip`, bytes }
 }

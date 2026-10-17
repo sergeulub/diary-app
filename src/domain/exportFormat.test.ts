@@ -3,13 +3,13 @@ import { describe, expect, it } from 'vitest'
 import { buildExportZip, metricsLine, renderMarkdown, selectChangedDays } from './exportFormat'
 import { DEFAULT_CATEGORIES } from './finance'
 import { DEFAULT_METRICS } from './metrics'
-import { T0, dayRec, goalRec, txRec } from './testFixtures'
+import { T0, dayRec, goalRec, photoRec, reviewRec, txRec } from './testFixtures'
 import type { DiarySnapshot, MetricDefinition } from './types'
 
 const defs = DEFAULT_METRICS
 const full = { mood: 4, boredom: 2, sleepStart: '23:40', sleepEnd: '07:10' }
 const snap = (patch: Partial<DiarySnapshot> = {}): DiarySnapshot => ({
-  metricDefinitions: defs, days: [], entries: [], financeCategories: DEFAULT_CATEGORIES, transactions: [], goals: [],
+  metricDefinitions: defs, days: [], entries: [], financeCategories: DEFAULT_CATEGORIES, transactions: [], goals: [], photos: [],
   meta: { boundaryHour: 6, lastExportAt: null, schemaVersion: 2 }, ...patch,
 })
 const since = (lastExportAt: string) => ({ boundaryHour: 6, lastExportAt, schemaVersion: 2 })
@@ -74,6 +74,19 @@ describe('selectChangedDays', () => {
     })
     expect(selectChangedDays(s)).toEqual(['2026-10-03', '2026-10-07'])
   })
+  it('день попадает, если изменился его непустой разбор; пустой и удалённый — нет', () => {
+    const s = snap({
+      days,
+      entries: [
+        reviewRec('2026-10-03', { text: 'Йогурт', updatedAt: '2026-10-06T10:00:00.000+03:00' }),
+        reviewRec('2026-10-09', { verdict: 'Работает', updatedAt: '2026-10-09T10:00:00.000+03:00' }),
+        reviewRec('2026-10-10', { updatedAt: '2026-10-10T10:00:00.000+03:00' }),
+        reviewRec('2026-10-11', { text: 'Кофе', updatedAt: '2026-10-11T10:00:00.000+03:00', deletedAt: '2026-10-11T10:00:00.000+03:00' }),
+      ],
+      meta: since('2026-10-05T23:00:00.000+03:00'),
+    })
+    expect(selectChangedDays(s)).toEqual(['2026-10-03', '2026-10-09'])
+  })
 })
 
 describe('renderMarkdown', () => {
@@ -113,6 +126,44 @@ describe('renderMarkdown', () => {
         'Траты: 1 250 ₽ — Продукты 800 · Кафе и доставка 450 (кофе с Машей, обед)\n' +
         '\n' +
         'Обычный день\n',
+    )
+  })
+  it('разборы после текста дня: пустые строки пропускаются, пустой и удалённый разбор не выводятся', () => {
+    const first = reviewRec('2026-10-17', {
+      text: ' Йогурт «Белое облако», полка у дома ', verdict: 'Наполовину', createdAt: '2026-10-17T21:00:00.000+03:00',
+    })
+    const second = reviewRec('2026-10-17', { change: 'Первые 2 секунды — продукт', createdAt: '2026-10-17T21:10:00.000+03:00' })
+    const s = snap({
+      days: [dayRec('2026-10-17', { text: 'Зашёл в магазин.' })],
+      entries: [
+        second, first,
+        reviewRec('2026-10-17', { createdAt: '2026-10-17T21:20:00.000+03:00' }),
+        reviewRec('2026-10-17', { text: 'Удалённый', deletedAt: T0 }),
+      ],
+      photos: [
+        photoRec(first.id, { id: 'p1', createdAt: '2026-10-17T21:01:00.000+03:00' }),
+        photoRec(first.id, { id: 'p2', createdAt: '2026-10-17T21:02:00.000+03:00' }),
+        photoRec(first.id, { id: 'p3', deletedAt: T0 }),
+      ],
+    })
+    expect(renderMarkdown(s, ['2026-10-17'], '2026-10-17')).toBe(
+      '## 2026-10-17, суббота\n' +
+        '\n' +
+        'Зашёл в магазин.\n' +
+        '\n' +
+        '### Разбор 1\n' +
+        '**Что это:** Йогурт «Белое облако», полка у дома\n' +
+        '**Работает ли:** Наполовину\n' +
+        'Фото: photos/p1.jpg, photos/p2.jpg\n' +
+        '\n' +
+        '### Разбор 2\n' +
+        '**Как сделал бы сам:** Первые 2 секунды — продукт\n',
+    )
+  })
+  it('день только с разбором', () => {
+    const s = snap({ entries: [reviewRec('2026-10-17', { text: 'Баннер' })] })
+    expect(renderMarkdown(s, ['2026-10-17'], '2026-10-17')).toBe(
+      '## 2026-10-17, суббота\n\n### Разбор 1\n**Что это:** Баннер\n',
     )
   })
   it('день только с операциями', () => {
@@ -155,6 +206,7 @@ describe('buildExportZip', () => {
     financeCategories: [],
     transactions: [],
     goals: [],
+    photos: [],
     meta: { boundaryHour: 6, lastExportAt: null, schemaVersion: 1 },
   }
   const now = new Date(2026, 9, 6, 22, 15)
@@ -167,7 +219,7 @@ describe('buildExportZip', () => {
   it('backup.json — весь дневник с formatVersion и exportedAt со смещением', () => {
     const files = unzipSync(buildExportZip(snapshot, now).bytes)
     const backup = JSON.parse(strFromU8(files['backup.json']))
-    expect(backup.formatVersion).toBe(2)
+    expect(backup.formatVersion).toBe(3)
     expect(backup.exportedAt).toMatch(/^2026-10-06T22:15:00\.000[+-]\d{2}:\d{2}$/)
     expect(backup.days).toEqual(snapshot.days)
     expect(backup.metricDefinitions).toEqual(snapshot.metricDefinitions)
@@ -175,7 +227,21 @@ describe('buildExportZip', () => {
     expect(backup.financeCategories).toEqual([])
     expect(backup.transactions).toEqual([])
     expect(backup.goals).toEqual([])
+    expect(backup.photos).toEqual([])
     expect(backup.meta).toEqual(snapshot.meta)
+  })
+  it('фото: живые — файлами photos/<id>.jpg, в backup.json — метаданные без байтов', () => {
+    const review = reviewRec('2026-10-06', { text: 'Йогурт' })
+    const live = photoRec(review.id, { id: 'p1', bytes: new Uint8Array([7, 8, 9]) })
+    const gone = photoRec(review.id, { id: 'p2', bytes: new Uint8Array(0), deletedAt: T0 })
+    const files = unzipSync(buildExportZip({ ...snapshot, entries: [review], photos: [live, gone] }, now).bytes)
+    expect(Array.from(files['photos/p1.jpg'])).toEqual([7, 8, 9])
+    expect(files['photos/p2.jpg']).toBeUndefined()
+    const backup = JSON.parse(strFromU8(files['backup.json']))
+    expect(backup.entries).toEqual([review])
+    const { bytes: _live, ...liveMeta } = live
+    const { bytes: _gone, ...goneMeta } = gone
+    expect(backup.photos).toEqual([{ ...liveMeta, file: 'photos/p1.jpg' }, { ...goneMeta, file: null }])
   })
   it('кириллица в .md сохраняется', () => {
     const files = unzipSync(buildExportZip(snapshot, now).bytes)
