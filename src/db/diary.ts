@@ -63,6 +63,11 @@ export async function listTransactions(from: string, to: string): Promise<Transa
   return db.transactions.where('day').between(from, to, true, true).toArray()
 }
 
+/** Все операции, вместе с удалёнными: баланс накоплений за всё время. */
+export async function listAllTransactions(): Promise<Transaction[]> {
+  return db.transactions.toArray()
+}
+
 export async function saveGoals(goals: Goal[]): Promise<void> {
   await db.goals.bulkPut(goals)
 }

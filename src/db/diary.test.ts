@@ -11,7 +11,7 @@ import { T0, dayRec, goalRec, txRec } from '../domain/testFixtures'
 import { db } from './database'
 import {
   applyImport, exportSnapshot, getDay, getFinanceCategories, getMeta, getMetrics, initDb, listDays, listFilledDays,
-  listGoals, listStreakDays, listTransactions, saveDay, saveFinanceCategories, saveGoals, saveMetrics, saveTransaction,
+  listAllTransactions, listGoals, listStreakDays, listTransactions, saveDay, saveFinanceCategories, saveGoals, saveMetrics, saveTransaction,
   setMeta, addPhoto, addReview, listEntries, listPhotos, listPhotosBetween, listReviews, removePhoto, removeReview,
   saveReview,
 } from './diary'
@@ -170,6 +170,7 @@ describe('финансы и цели в базе', () => {
     const d = txRec('2026-12-01')
     for (const t of [a, b, c, d]) await saveTransaction(t)
     expect((await listTransactions('2026-11-01', '2026-11-30')).map((t) => t.id).sort()).toEqual([b.id, c.id].sort())
+    expect((await listAllTransactions()).map((t) => t.id).sort()).toEqual([a.id, b.id, c.id, d.id].sort())
   })
   it('цели: выборка по месяцу', async () => {
     const a = goalRec('2026-11')
