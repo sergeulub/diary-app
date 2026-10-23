@@ -258,6 +258,9 @@ export function planPatch(patch: PeoplePatch, data: PeopleData, applied: Applied
   const nameOf = (ref: string) => (isTempId(ref) ? newNames.get(ref) : livePerson(ref)?.name) ?? ''
   /** Ссылка на человека: новый из файла — годится, существующий — только живой. */
   const refOk = (ref: string) => isTempId(ref) || !!livePerson(ref)
+  /** Запись, которую создала бы операция, уже есть и удалена в телефоне: повтор файла её не воскрешает. */
+  const deletedHere = (rows: { id: string; deletedAt: string | null }[], index: number) =>
+    rows.some((r) => r.id === derivedId(`${patch.id}:${index}`) && !isLive(r))
 
   const ops = patch.ops.map((op, index): PlannedOp => {
     let status: OpStatus = 'ok'
@@ -271,6 +274,7 @@ export function planPatch(patch: PeoplePatch, data: PeopleData, applied: Applied
       case 'createPerson':
         personId = op.tempId
         after = inputText(op.person)
+        if (deletedHere(data.people, index)) block(GONE)
         break
       case 'updatePerson': {
         personId = op.id
@@ -293,14 +297,17 @@ export function planPatch(patch: PeoplePatch, data: PeopleData, applied: Applied
       case 'addNote':
         personId = op.personId
         after = inputText(op.note)
-        if (!refOk(op.personId)) block(GONE)
+        if (!refOk(op.personId) || deletedHere(data.personNotes, index)) block(GONE)
         break
       case 'upsertDiaryNote': {
         personId = op.personId
         after = { day: op.day, talk: op.talk }
         if (!refOk(op.personId)) { block(GONE); break }
         const n = data.personNotes.find((x) => x.personId === op.personId && x.kind === 'diary' && x.day === op.day && isLive(x))
-        if (!n) break
+        if (!n) {
+          if (deletedHere(data.personNotes, index)) block(GONE)
+          break
+        }
         before = { day: n.day, talk: n.talk }
         if (n.talk !== op.talk && n.patchId !== patch.id && Date.parse(n.updatedAt) > Date.parse(patch.basedOnExportAt)) conflict()
         break
@@ -319,7 +326,7 @@ export function planPatch(patch: PeoplePatch, data: PeopleData, applied: Applied
       case 'linkPeople':
         personId = op.a
         after = { a: nameOf(op.a), b: nameOf(op.b) }
-        if (!refOk(op.a) || !refOk(op.b)) block(GONE)
+        if (!refOk(op.a) || !refOk(op.b) || deletedHere(data.personLinks, index)) block(GONE)
         else if (op.a === op.b) block('Нельзя связать человека с самим собой')
         break
       case 'renameSphere': {
@@ -504,7 +511,7 @@ export function applyPlan(plan: PatchPlan, decisions: Decisions, data: PeopleDat
       case 'linkPeople': {
         const pair = linkPair(resolve(op.a), resolve(op.b))
         if (!pair || links.values().some((l) => isLive(l) && l.a === pair[0] && l.b === pair[1])) break
-        const id = derivedId(`link:${pair[0]}:${pair[1]}`)
+        const id = opId(po.index)
         const link: PersonLink = { id, a: pair[0], b: pair[1], createdAt: links.get(id)?.createdAt ?? now, updatedAt: now, deletedAt: null }
         links.put(link)
         break

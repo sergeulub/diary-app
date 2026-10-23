@@ -42,7 +42,7 @@ describe('applyPlan', () => {
     const note = res.changes.personNotes.find((n) => n.id === derivedId('patch-1:3'))
     expect(note).toMatchObject({ personId: NEW_ID, kind: 'meeting', day: '2026-10-20', occasion: 'кофе', talk: 'Об аналитике', patchId: 'patch-1' })
     const [a, b] = [NEW_ID, 'ivan'].sort()
-    expect(res.changes.personLinks).toEqual([{ id: derivedId(`link:${a}:${b}`), a, b, createdAt: NOW, updatedAt: NOW, deletedAt: null }])
+    expect(res.changes.personLinks).toEqual([{ id: derivedId('patch-1:6'), a, b, createdAt: NOW, updatedAt: NOW, deletedAt: null }])
     expect(res.changes.people.find((p) => p.id === 'ivan')).toMatchObject({ position: 'Управляющий партнёр', sphereKeys: ['s-kons'], updatedAt: NOW })
     expect(res.changes.personNotes.find((n) => n.id === 'note-ivan')).toMatchObject({ talk: 'О стажировке', patchId: 'patch-1' })
     expect(res.applied).toEqual({ id: 'patch-1', appliedAt: NOW, basedOnExportAt: '2026-10-25T23:10:00+03:00' })
@@ -120,6 +120,22 @@ describe('applyPlan', () => {
     const spheres = applyAll(withOps([{ op: 'mergeSpheres', from: 'консалт', into: 'консалтинг' }]), data)
     expect(spheres.changes.people.map((p) => [p.id, p.sphereKeys, p.updatedAt])).toEqual([['ivan', ['s-kons'], NOW]])
     expect(spheres.changes.spheres.find((s) => s.key === 's-konsalt')?.deletedAt).toBe(NOW)
+  })
+  it('удалённое в телефоне после первого применения не воскресает при повторе', () => {
+    const data = patchData()
+    const once = withChanges(data, applyAll(sample(), data))
+    const gone = '2026-10-28T10:00:00.000+03:00'
+    const deleted: PeopleData = {
+      ...once,
+      people: once.people.map((p) => (p.id === NEW_ID ? { ...p, deletedAt: gone } : p)),
+      personNotes: once.personNotes.map((n) => (n.kind === 'diary' ? { ...n, deletedAt: gone } : n)),
+    }
+    const plan = planPatch(sample(), deleted, [])
+    expect([plan.ops[0].status, plan.ops[4].status]).toEqual(['blocked', 'blocked'])
+    const after = withChanges(deleted, applyPlan(plan, defaultDecisions(plan), deleted, '2026-10-29T10:00:00.000+03:00'))
+    expect(after.people.find((p) => p.id === NEW_ID)?.deletedAt).toBe(gone)
+    expect(after.personNotes.filter((n) => n.kind === 'diary' && !n.deletedAt)).toEqual([])
+    expect(after.personLinks.filter((l) => !l.deletedAt && (l.a === NEW_ID || l.b === NEW_ID))).toHaveLength(1)
   })
   it('повторное применение не плодит людей, записи и связи', () => {
     const data = patchData()
