@@ -76,3 +76,23 @@ export function photoRec(entryId: string, patch: Partial<PhotoRecord> = {}): Pho
     createdAt: T0, updatedAt: T0, deletedAt: null, ...patch,
   }
 }
+
+/** Пример из ТЗ Б4 — все девять операций. */
+export function samplePatch(): Record<string, unknown> & { ops: Record<string, unknown>[] } {
+  return {
+    kind: 'people-patch', patchVersion: 1, id: 'patch-1',
+    createdAt: '2026-10-26T12:00:00+03:00', basedOnExportAt: '2026-10-25T23:10:00+03:00',
+    summary: 'Разбор 19–25.10: 1 заметка, 1 запись из дневника, 1 объединение',
+    ops: [
+      { op: 'createPerson', tempId: 'new-1', person: { name: 'Олег Белов', company: 'Луч', spheres: ['аналитика'], circle: 'Однокурсник / друг' } },
+      { op: 'updatePerson', id: 'ivan', baseUpdatedAt: T0, set: { position: 'Управляющий партнёр', spheres: ['консалтинг'] } },
+      { op: 'updateNote', id: 'note-ivan', baseUpdatedAt: T0, set: { talk: 'О стажировке', life: 'Подкаст', agreements: 'Резюме' } },
+      { op: 'addNote', personId: 'new-1', note: { kind: 'meeting', day: '2026-10-20', occasion: 'кофе', talk: 'Об аналитике' } },
+      { op: 'upsertDiaryNote', personId: 'ivan', day: '2026-10-18', talk: 'Ходили в кино' },
+      { op: 'mergePeople', fromId: 'dima', intoId: 'dmitry', baseUpdatedAt: { from: T0, into: T0 } },
+      { op: 'linkPeople', a: 'new-1', b: 'ivan' },
+      { op: 'renameSphere', name: 'Консалтинг', newName: 'консалтинг' },
+      { op: 'mergeSpheres', from: 'консалт', into: 'консалтинг' },
+    ],
+  }
+}
