@@ -3,14 +3,14 @@ import { describe, expect, it } from 'vitest'
 import { FORMAT_VERSION, buildExportZip, financeLines, metricsLine, renderMarkdown, selectChangedDays } from './exportFormat'
 import { DEFAULT_CATEGORIES } from './finance'
 import { DEFAULT_METRICS } from './metrics'
-import { T0, dayRec, goalRec, photoRec, reviewRec, txRec } from './testFixtures'
+import { EMPTY_PEOPLE, T0, dayRec, goalRec, photoRec, reviewRec, txRec } from './testFixtures'
 import type { DiarySnapshot, MetricDefinition } from './types'
 
 const defs = DEFAULT_METRICS
 const full = { mood: 4, boredom: 2, sleepStart: '23:40', sleepEnd: '07:10' }
 const snap = (patch: Partial<DiarySnapshot> = {}): DiarySnapshot => ({
   metricDefinitions: defs, days: [], entries: [], financeCategories: DEFAULT_CATEGORIES, transactions: [], goals: [], photos: [],
-  meta: { boundaryHour: 6, lastExportAt: null, schemaVersion: 2 }, ...patch,
+  ...EMPTY_PEOPLE, meta: { boundaryHour: 6, lastExportAt: null, schemaVersion: 2 }, ...patch,
 })
 const since = (lastExportAt: string) => ({ boundaryHour: 6, lastExportAt, schemaVersion: 2 })
 
@@ -218,6 +218,7 @@ describe('buildExportZip', () => {
     transactions: [],
     goals: [],
     photos: [],
+    ...EMPTY_PEOPLE,
     meta: { boundaryHour: 6, lastExportAt: null, schemaVersion: 1 },
   }
   const now = new Date(2026, 9, 6, 22, 15)

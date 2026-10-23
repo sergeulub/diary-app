@@ -58,13 +58,22 @@ export interface PhotoRecord {
   deletedAt: string | null
 }
 
+/** Применённый файл изменений с ПК: по basedOnExportAt лента отделяет то, что Claude уже видел. */
+export interface AppliedPatch {
+  id: string
+  appliedAt: string
+  basedOnExportAt: string
+}
+
 export interface Meta {
   boundaryHour: number
   lastExportAt: string | null
   schemaVersion: number
+  /** Нет — ни один файл изменений не применён. */
+  appliedPatches?: AppliedPatch[]
 }
 
-export interface DiarySnapshot {
+export interface DiarySnapshot extends PeopleData {
   metricDefinitions: MetricDefinition[]
   days: DayRecord[]
   entries: EntryRecord[]
@@ -139,4 +148,113 @@ export interface Goal {
   createdAt: string
   updatedAt: string
   deletedAt: string | null
+}
+
+export type ContactType = 'phone' | 'telegram' | 'email' | 'linkedin' | 'other'
+
+export interface Contact {
+  type: ContactType
+  value: string
+}
+
+/** Человек модуля «Люди». Обязательно только имя; остальное — пустые строки и списки. */
+export interface Person {
+  id: string
+  name: string
+  /** «Как ещё называю» — помогает Claude узнать человека в дневнике. */
+  aliases: string[]
+  company: string
+  position: string
+  /** «Чем занимается». */
+  about: string
+  sphereKeys: string[]
+  /** '' — круг не выбран. */
+  circleKey: string
+  /** «Чем может быть полезен». */
+  canHelp: string
+  /** «Чем я могу быть полезен ему». */
+  iCanHelp: string
+  personal: string
+  contacts: Contact[]
+  archived: boolean
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export type PersonNoteKind = 'meeting' | 'diary'
+
+/** Запись ленты человека. У diary заполнены только day и talk. */
+export interface PersonNote {
+  id: string
+  personId: string
+  kind: PersonNoteKind
+  /** Логический день ГГГГ-ММ-ДД. */
+  day: string
+  /** Копия названия события или повод из файла изменений; в форме не вводится. */
+  occasion: string
+  /** '' — без события. */
+  eventId: string
+  /** «О чём говорили». */
+  talk: string
+  /** «Что актуально у него». */
+  life: string
+  /** «Договорились, следующий шаг». */
+  agreements: string
+  /** Исходная заметка, набранная или надиктованная на ходу. */
+  original: string
+  /** id файла изменений, который создал запись или последним менял её поля; '' — только из телефона. */
+  patchId: string
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+/** Событие, где знакомишься сразу с несколькими (не Event: имя занято DOM). */
+export interface PeopleEvent {
+  id: string
+  day: string
+  title: string
+  topic: string
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+/** Сфера из общего словаря; объединённая — с deletedAt. */
+export interface Sphere {
+  key: string
+  name: string
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface Circle {
+  key: string
+  name: string
+  order: number
+  archived: boolean
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+/** «Знаком с» — двусторонняя связь; a < b строкой. */
+export interface PersonLink {
+  id: string
+  a: string
+  b: string
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface PeopleData {
+  people: Person[]
+  personNotes: PersonNote[]
+  events: PeopleEvent[]
+  spheres: Sphere[]
+  circles: Circle[]
+  personLinks: PersonLink[]
 }

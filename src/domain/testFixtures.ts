@@ -1,6 +1,9 @@
-import type { DayRecord, EntryRecord, Goal, PhotoRecord, Transaction } from './types'
+import type { DayRecord, EntryRecord, Goal, PeopleData, PhotoRecord, Transaction } from './types'
 
 export const T0 = '2026-10-01T22:00:00.000+03:00'
+
+/** Модуль «Люди» без данных — для снимков в тестах экспорта и импорта. */
+export const EMPTY_PEOPLE: PeopleData = { people: [], personNotes: [], events: [], spheres: [], circles: [], personLinks: [] }
 
 export function dayRec(day: string, patch: Partial<DayRecord> = {}): DayRecord {
   return { day, id: `id-${day}`, metrics: {}, text: '', createdAt: T0, updatedAt: T0, deletedAt: null, ...patch }

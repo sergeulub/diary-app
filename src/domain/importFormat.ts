@@ -246,6 +246,8 @@ export function parseImport(json: string, files: Record<string, Uint8Array> = {}
     transactions: list(raw.transactions).map((t, i) => parseTransaction(t, i, raw.formatVersion as number)),
     goals: list(raw.goals).map(parseGoal),
     photos: list(raw.photos).flatMap((p, i) => parsePhoto(p, i, files) ?? []),
+    // таблицы «Людей» читаются с formatVersion 5 (задача 5 плана); до этого — пустые
+    people: [], personNotes: [], events: [], spheres: [], circles: [], personLinks: [],
     meta: parseMeta(raw.meta),
   }
 }

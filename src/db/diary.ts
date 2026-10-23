@@ -4,6 +4,7 @@ import type { ImportPlan } from '../domain/importFormat'
 import { DEFAULT_CATEGORIES, sortCategories } from '../domain/finance'
 import { logicalDay } from '../domain/logicalDay'
 import { DEFAULT_METRICS, isDayComplete, isDayFilled, sortMetrics } from '../domain/metrics'
+import { DEFAULT_CIRCLES } from '../domain/people'
 import {
   applyReviewPatch, createPhoto, createReview, deletePhoto, deleteReview, livePhotos, reviewsOfDay, type ReviewPatch,
 } from '../domain/reviews'
@@ -13,12 +14,13 @@ import type {
 } from '../domain/types'
 import { db } from './database'
 
-const DEFAULT_META: Meta = { boundaryHour: 6, lastExportAt: null, schemaVersion: 3 }
+const DEFAULT_META: Meta = { boundaryHour: 6, lastExportAt: null, schemaVersion: 4, appliedPatches: [] }
 
 export async function initDb(): Promise<void> {
-  await db.transaction('rw', db.metricDefinitions, db.meta, db.financeCategories, async () => {
+  await db.transaction('rw', [db.metricDefinitions, db.meta, db.financeCategories, db.circles], async () => {
     if ((await db.metricDefinitions.count()) === 0) await db.metricDefinitions.bulkAdd(DEFAULT_METRICS)
     if ((await db.financeCategories.count()) === 0) await db.financeCategories.bulkAdd(DEFAULT_CATEGORIES)
+    if ((await db.circles.count()) === 0) await db.circles.bulkAdd(DEFAULT_CIRCLES)
     const present = new Set((await db.meta.toArray()).map((r) => r.key))
     const missing = Object.entries(DEFAULT_META)
       .filter(([key]) => !present.has(key))
@@ -206,7 +208,10 @@ export async function listPhotosBetween(from: string, to: string): Promise<Photo
 }
 
 export async function exportSnapshot(): Promise<DiarySnapshot> {
-  const tables = [db.days, db.metricDefinitions, db.entries, db.meta, db.financeCategories, db.transactions, db.goals, db.photos]
+  const tables = [
+    db.days, db.metricDefinitions, db.entries, db.meta, db.financeCategories, db.transactions, db.goals, db.photos,
+    db.people, db.personNotes, db.events, db.spheres, db.circles, db.personLinks,
+  ]
   return db.transaction('r', tables, async () => ({
     metricDefinitions: await db.metricDefinitions.toArray(),
     days: await db.days.toArray(),
@@ -215,6 +220,12 @@ export async function exportSnapshot(): Promise<DiarySnapshot> {
     transactions: await db.transactions.toArray(),
     goals: await db.goals.toArray(),
     photos: await db.photos.toArray(),
+    people: await db.people.toArray(),
+    personNotes: await db.personNotes.toArray(),
+    events: await db.events.toArray(),
+    spheres: await db.spheres.toArray(),
+    circles: await db.circles.toArray(),
+    personLinks: await db.personLinks.toArray(),
     meta: await getMeta(),
   }))
 }

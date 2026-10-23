@@ -4,15 +4,17 @@ import { buildBackup, buildExportZip } from './exportFormat'
 import { ImportError, describeImport, extractArchive, extractBackupJson, importSize, parseImport, planImport } from './importFormat'
 import { DEFAULT_METRICS, SEED_TIME } from './metrics'
 import { DEFAULT_CATEGORIES } from './finance'
-import { dayRec, goalRec, photoRec, reviewRec, txRec } from './testFixtures'
+import { EMPTY_PEOPLE, dayRec, goalRec, photoRec, reviewRec, txRec } from './testFixtures'
 import type { DiarySnapshot } from './types'
 
 const meta = { boundaryHour: 6, lastExportAt: null, schemaVersion: 1 }
 const snapshot = (patch: Partial<DiarySnapshot> = {}): DiarySnapshot => ({
-  metricDefinitions: DEFAULT_METRICS, days: [], entries: [], financeCategories: [], transactions: [], goals: [], photos: [], meta,
-  ...patch,
+  metricDefinitions: DEFAULT_METRICS, days: [], entries: [], financeCategories: [], transactions: [], goals: [], photos: [],
+  ...EMPTY_PEOPLE, meta, ...patch,
 })
-const EMPTY = { days: [], metricDefinitions: [], entries: [], financeCategories: [], transactions: [], goals: [], photos: [] }
+const EMPTY = {
+  days: [], metricDefinitions: [], entries: [], financeCategories: [], transactions: [], goals: [], photos: [], ...EMPTY_PEOPLE,
+}
 const json = (s: DiarySnapshot) => JSON.stringify(buildBackup(s, '2026-10-06T22:00:00.000+03:00'))
 
 describe('extractBackupJson', () => {

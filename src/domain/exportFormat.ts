@@ -40,6 +40,12 @@ export function buildBackup(s: DiarySnapshot, exportedAt: string): Backup {
     transactions: s.transactions,
     goals: s.goals,
     photos: s.photos.map(photoMeta),
+    people: s.people,
+    personNotes: s.personNotes,
+    events: s.events,
+    spheres: s.spheres,
+    circles: s.circles,
+    personLinks: s.personLinks,
     meta: s.meta,
   }
 }

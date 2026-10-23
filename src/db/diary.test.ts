@@ -27,9 +27,11 @@ async function freshDb() {
 beforeEach(freshDb)
 
 describe('initDb', () => {
-  it('засевает четыре метрики и meta по умолчанию', async () => {
+  it('засевает четыре метрики, круги и meta по умолчанию', async () => {
     expect((await getMetrics()).map((d) => d.key)).toEqual(['mood', 'boredom', 'sleepStart', 'sleepEnd'])
-    expect(await getMeta()).toEqual({ boundaryHour: 6, lastExportAt: null, schemaVersion: 3 })
+    expect(await getMeta()).toEqual({ boundaryHour: 6, lastExportAt: null, schemaVersion: 4, appliedPatches: [] })
+    const circles = (await exportSnapshot()).circles.sort((a, b) => a.order - b.order)
+    expect(circles.map((c) => c.key)).toEqual(['speaker', 'friends', 'hr', 'mentor'])
   })
   it('повторный запуск не дублирует и не затирает правки', async () => {
     await saveMetrics([{ ...DEFAULT_METRICS[1], name: 'Тоска' }])
@@ -39,6 +41,28 @@ describe('initDb', () => {
     expect(metrics).toHaveLength(4)
     expect(metrics[1].name).toBe('Тоска')
     expect((await getMeta()).boundaryHour).toBe(4)
+  })
+})
+
+describe('миграция v3 → v4', () => {
+  it('данные остаются, schemaVersion 4, круги засеяны, люди пустые', async () => {
+    db.close()
+    await Dexie.delete('diary')
+    const old = new Dexie('diary') // версии 1–3 — копия src/db/database.ts
+    old.version(1).stores({ days: 'day, updatedAt', metricDefinitions: 'key', entries: 'id, day, updatedAt', meta: 'key' })
+    old.version(2).stores({ financeCategories: 'key', transactions: 'id, day, updatedAt', goals: 'id, month, updatedAt' })
+    old.version(3).stores({ photos: 'id, entryId, day, updatedAt' })
+    await old.open()
+    await old.table('days').put(dayRec('2026-10-05', { text: 'Было' }))
+    await old.table('meta').put({ key: 'schemaVersion', value: 3 })
+    old.close()
+    await db.open()
+    await initDb()
+    expect((await getDay('2026-10-05'))?.text).toBe('Было')
+    expect((await getMeta()).schemaVersion).toBe(4)
+    const s = await exportSnapshot()
+    expect(s.circles).toHaveLength(4)
+    expect(s.people).toEqual([])
   })
 })
 
@@ -227,8 +251,8 @@ describe('разборы и фото в базе', () => {
   })
 })
 
-describe('апгрейд базы v1 → v3', () => {
-  it('сохраняет дни, метрики и настройки, засевает категории, ставит schemaVersion 3', async () => {
+describe('апгрейд базы v1 → v4', () => {
+  it('сохраняет дни, метрики и настройки, засевает категории, ставит schemaVersion 4', async () => {
     await db.delete()
     const v1 = new Dexie('diary')
     v1.version(1).stores({ days: 'day, updatedAt', metricDefinitions: 'key', entries: 'id, day, updatedAt', meta: 'key' })
@@ -245,7 +269,7 @@ describe('апгрейд базы v1 → v3', () => {
     await initDb()
     expect(await getDay('2026-10-05')).toEqual(day)
     expect(await getMetrics()).toHaveLength(4)
-    expect(await getMeta()).toEqual({ boundaryHour: 4, lastExportAt: null, schemaVersion: 3 })
+    expect(await getMeta()).toEqual({ boundaryHour: 4, lastExportAt: null, schemaVersion: 4, appliedPatches: [] })
     expect(await getFinanceCategories()).toHaveLength(DEFAULT_CATEGORIES.length)
   })
 })

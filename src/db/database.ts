@@ -1,5 +1,8 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { DayRecord, EntryRecord, FinanceCategory, Goal, MetricDefinition, PhotoRecord, Transaction } from '../domain/types'
+import type {
+  Circle, DayRecord, EntryRecord, FinanceCategory, Goal, MetricDefinition, PeopleEvent, Person, PersonLink, PersonNote,
+  PhotoRecord, Sphere, Transaction,
+} from '../domain/types'
 
 export interface MetaRow {
   key: string
@@ -16,6 +19,12 @@ export const db = new Dexie('diary') as Dexie & {
   transactions: EntityTable<Transaction, 'id'>
   goals: EntityTable<Goal, 'id'>
   photos: EntityTable<PhotoRecord, 'id'>
+  people: EntityTable<Person, 'id'>
+  personNotes: EntityTable<PersonNote, 'id'>
+  events: EntityTable<PeopleEvent, 'id'>
+  spheres: EntityTable<Sphere, 'key'>
+  circles: EntityTable<Circle, 'key'>
+  personLinks: EntityTable<PersonLink, 'id'>
 }
 
 // Схема меняется только добавлением db.version(2).stores(...).upgrade(...); версию 1 после релиза не править.
@@ -39,3 +48,15 @@ db.version(2)
 db.version(3)
   .stores({ photos: 'id, entryId, day, updatedAt' })
   .upgrade((tx) => tx.table('meta').put({ key: 'schemaVersion', value: 3 }))
+
+// Модуль «Люди». Круги по умолчанию засевает initDb — и в новой базе, и в обновлённой.
+db.version(4)
+  .stores({
+    people: 'id, updatedAt',
+    personNotes: 'id, personId, day, eventId, updatedAt',
+    events: 'id, day, updatedAt',
+    spheres: 'key',
+    circles: 'key',
+    personLinks: 'id, a, b',
+  })
+  .upgrade((tx) => tx.table('meta').put({ key: 'schemaVersion', value: 4 }))
