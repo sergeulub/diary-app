@@ -6,8 +6,9 @@ import { AREAS, isGoalTarget, isMonth } from './goals'
 import { validateMetricValue } from './metrics'
 import { MAX_AMOUNT } from './money'
 import type {
-  DayRecord, DiarySnapshot, EntryRecord, FaceKind, FinanceCategory, FinanceKind, Goal, GoalArea, Importance, Meta,
-  MetricDefinition, MetricType, MetricValue, PhotoRecord, Transaction, TransactionKind,
+  Circle, Contact, ContactType, DayRecord, DiarySnapshot, EntryRecord, FaceKind, FinanceCategory, FinanceKind, Goal,
+  GoalArea, Importance, Meta, MetricDefinition, MetricType, MetricValue, PeopleEvent, Person, PersonLink, PersonNote,
+  PhotoRecord, Sphere, Transaction, TransactionKind,
 } from './types'
 
 /** Ошибка импорта с текстом для пользователя. */
@@ -205,6 +206,100 @@ function parseGoal(x: unknown, i: number): Goal {
   }
 }
 
+const CONTACT_TYPES: ContactType[] = ['phone', 'telegram', 'email', 'linkedin', 'other']
+const isStrList = (x: unknown): x is string[] => Array.isArray(x) && x.every(isStr)
+const isContact = (x: unknown): x is Contact => isObj(x) && CONTACT_TYPES.includes(x.type as ContactType) && isStr(x.value)
+const str = (x: unknown) => (isStr(x) ? x : '')
+const PERSON_TEXT = ['company', 'position', 'about', 'circleKey', 'canHelp', 'iCanHelp', 'personal'] as const
+
+function parsePerson(x: unknown, i: number): Person {
+  if (
+    !isObj(x) || !isStr(x.id) || !x.id || !isStr(x.name) || !x.name.trim() || !PERSON_TEXT.every((k) => optStr(x[k])) ||
+    !(x.aliases === undefined || isStrList(x.aliases)) || !(x.sphereKeys === undefined || isStrList(x.sphereKeys)) ||
+    !(x.contacts === undefined || (Array.isArray(x.contacts) && x.contacts.every(isContact))) ||
+    !isStamp(x.createdAt) || !isStamp(x.updatedAt) || !isDeletedAt(x.deletedAt)
+  ) {
+    throw new ImportError(`Человек №${i + 1}: ${BAD_FIELDS}`)
+  }
+  return {
+    id: x.id, name: x.name,
+    aliases: isStrList(x.aliases) ? x.aliases : [],
+    company: str(x.company), position: str(x.position), about: str(x.about),
+    sphereKeys: isStrList(x.sphereKeys) ? x.sphereKeys : [],
+    circleKey: str(x.circleKey), canHelp: str(x.canHelp), iCanHelp: str(x.iCanHelp), personal: str(x.personal),
+    contacts: Array.isArray(x.contacts) ? x.contacts.filter(isContact).map((c) => ({ type: c.type, value: c.value })) : [],
+    archived: x.archived === true,
+    createdAt: x.createdAt, updatedAt: x.updatedAt, deletedAt: isStamp(x.deletedAt) ? x.deletedAt : null,
+  }
+}
+
+const NOTE_TEXT = ['occasion', 'eventId', 'talk', 'life', 'agreements', 'original', 'patchId'] as const
+
+function parseNote(x: unknown, i: number): PersonNote {
+  if (
+    !isObj(x) || !isStr(x.id) || !x.id || !isStr(x.personId) || !x.personId || (x.kind !== 'meeting' && x.kind !== 'diary') ||
+    !isStr(x.day) || !DAY_RE.test(x.day) || !NOTE_TEXT.every((k) => optStr(x[k])) ||
+    !isStamp(x.createdAt) || !isStamp(x.updatedAt) || !isDeletedAt(x.deletedAt)
+  ) {
+    throw new ImportError(`Запись о человеке №${i + 1}: ${BAD_FIELDS}`)
+  }
+  return {
+    id: x.id, personId: x.personId, kind: x.kind, day: x.day,
+    occasion: str(x.occasion), eventId: str(x.eventId), talk: str(x.talk), life: str(x.life),
+    agreements: str(x.agreements), original: str(x.original), patchId: str(x.patchId),
+    createdAt: x.createdAt, updatedAt: x.updatedAt, deletedAt: isStamp(x.deletedAt) ? x.deletedAt : null,
+  }
+}
+
+function parseEvent(x: unknown, i: number): PeopleEvent {
+  if (
+    !isObj(x) || !isStr(x.id) || !x.id || !isStr(x.day) || !DAY_RE.test(x.day) || !isStr(x.title) || !optStr(x.topic) ||
+    !isStamp(x.createdAt) || !isStamp(x.updatedAt) || !isDeletedAt(x.deletedAt)
+  ) {
+    throw new ImportError(`Событие №${i + 1}: ${BAD_FIELDS}`)
+  }
+  return {
+    id: x.id, day: x.day, title: x.title, topic: str(x.topic),
+    createdAt: x.createdAt, updatedAt: x.updatedAt, deletedAt: isStamp(x.deletedAt) ? x.deletedAt : null,
+  }
+}
+
+function parseSphere(x: unknown, i: number): Sphere {
+  if (!isObj(x) || !isStr(x.key) || !x.key || !isStr(x.name) || !isStamp(x.createdAt) || !isStamp(x.updatedAt) || !isDeletedAt(x.deletedAt)) {
+    throw new ImportError(`Сфера №${i + 1}: ${BAD_FIELDS}`)
+  }
+  return {
+    key: x.key, name: x.name,
+    createdAt: x.createdAt, updatedAt: x.updatedAt, deletedAt: isStamp(x.deletedAt) ? x.deletedAt : null,
+  }
+}
+
+function parseCircle(x: unknown, i: number): Circle {
+  if (
+    !isObj(x) || !isStr(x.key) || !x.key || !isStr(x.name) || typeof x.order !== 'number' ||
+    !isStamp(x.createdAt) || !isStamp(x.updatedAt) || !isDeletedAt(x.deletedAt)
+  ) {
+    throw new ImportError(`Круг №${i + 1}: ${BAD_FIELDS}`)
+  }
+  return {
+    key: x.key, name: x.name, order: x.order, archived: x.archived === true,
+    createdAt: x.createdAt, updatedAt: x.updatedAt, deletedAt: isStamp(x.deletedAt) ? x.deletedAt : null,
+  }
+}
+
+function parseLink(x: unknown, i: number): PersonLink {
+  if (
+    !isObj(x) || !isStr(x.id) || !x.id || !isStr(x.a) || !x.a || !isStr(x.b) || !x.b || x.a === x.b ||
+    !isStamp(x.createdAt) || !isStamp(x.updatedAt) || !isDeletedAt(x.deletedAt)
+  ) {
+    throw new ImportError(`Связь №${i + 1}: ${BAD_FIELDS}`)
+  }
+  return {
+    id: x.id, a: x.a, b: x.b,
+    createdAt: x.createdAt, updatedAt: x.updatedAt, deletedAt: isStamp(x.deletedAt) ? x.deletedAt : null,
+  }
+}
+
 const list = (x: unknown): unknown[] => (Array.isArray(x) ? x : [])
 
 function parseMeta(x: unknown): Meta {
@@ -246,8 +341,13 @@ export function parseImport(json: string, files: Record<string, Uint8Array> = {}
     transactions: list(raw.transactions).map((t, i) => parseTransaction(t, i, raw.formatVersion as number)),
     goals: list(raw.goals).map(parseGoal),
     photos: list(raw.photos).flatMap((p, i) => parsePhoto(p, i, files) ?? []),
-    // таблицы «Людей» читаются с formatVersion 5 (задача 5 плана); до этого — пустые
-    people: [], personNotes: [], events: [], spheres: [], circles: [], personLinks: [],
+    // «Люди» появились в формате 5: в файлах старше этих массивов нет — пустые
+    people: list(raw.people).map(parsePerson),
+    personNotes: list(raw.personNotes).map(parseNote),
+    events: list(raw.events).map(parseEvent),
+    spheres: list(raw.spheres).map(parseSphere),
+    circles: list(raw.circles).map(parseCircle),
+    personLinks: list(raw.personLinks).map(parseLink),
     meta: parseMeta(raw.meta),
   }
 }
@@ -266,6 +366,12 @@ export interface ImportPlan {
   transactions: MergePart<Transaction>
   goals: MergePart<Goal>
   photos: MergePart<PhotoRecord>
+  people: MergePart<Person>
+  personNotes: MergePart<PersonNote>
+  events: MergePart<PeopleEvent>
+  spheres: MergePart<Sphere>
+  circles: MergePart<Circle>
+  personLinks: MergePart<PersonLink>
 }
 
 /** Слияние по ключу: нового нет — добавить; в файле свежее `updatedAt` — заменить; иначе оставить своё. */
@@ -283,10 +389,7 @@ function mergeBy<T extends { updatedAt: string }>(current: T[], incoming: T[], k
   return part
 }
 
-export function planImport(
-  current: Pick<DiarySnapshot, 'days' | 'metricDefinitions' | 'entries' | 'financeCategories' | 'transactions' | 'goals' | 'photos'>,
-  incoming: ImportedBackup,
-): ImportPlan {
+export function planImport(current: Omit<DiarySnapshot, 'meta'>, incoming: ImportedBackup): ImportPlan {
   return {
     days: mergeBy(current.days, incoming.days, (d) => d.day),
     metricDefinitions: mergeBy(current.metricDefinitions, incoming.metricDefinitions, (d) => d.key),
@@ -295,6 +398,12 @@ export function planImport(
     transactions: mergeBy(current.transactions, incoming.transactions, (t) => t.id),
     goals: mergeBy(current.goals, incoming.goals, (g) => g.id),
     photos: mergeBy(current.photos, incoming.photos, (p) => p.id),
+    people: mergeBy(current.people, incoming.people, (p) => p.id),
+    personNotes: mergeBy(current.personNotes, incoming.personNotes, (n) => n.id),
+    events: mergeBy(current.events, incoming.events, (e) => e.id),
+    spheres: mergeBy(current.spheres, incoming.spheres, (s) => s.key),
+    circles: mergeBy(current.circles, incoming.circles, (c) => c.key),
+    personLinks: mergeBy(current.personLinks, incoming.personLinks, (l) => l.id),
   }
 }
 
@@ -311,6 +420,7 @@ export function describeImport(plan: ImportPlan): string {
   const extra: [string, MergePart<unknown>][] = [
     ['Категорий', plan.financeCategories], ['Операций', plan.transactions], ['Целей', plan.goals],
     ['Разборов', plan.entries], ['Фото', plan.photos],
+    ['Людей', plan.people], ['Записей о людях', plan.personNotes], ['Событий', plan.events],
   ]
   for (const [label, p] of extra) if (p.put.length) parts.push(describePart(label, p))
   return parts.join(' ')

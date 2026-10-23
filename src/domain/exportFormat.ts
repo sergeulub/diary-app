@@ -5,6 +5,7 @@ import { AREA_LABELS, GOAL_STATE_LABELS, formatGoalValue, goalProgress, goalsOfM
 import { formatDate, logicalDay } from './logicalDay'
 import { SCALE_LABELS, isDayFilled, sortMetrics } from './metrics'
 import { formatAmount, formatMoney } from './money'
+import { buildPeopleFiles } from './peopleExport'
 import { isReviewEmpty, livePhotos, reviewsOfDay } from './reviews'
 import { monthName, weekdayName } from './ru'
 import { formatDuration, sleepDuration } from './sleep'
@@ -12,7 +13,7 @@ import type {
   DayRecord, DiarySnapshot, EntryRecord, FinanceCategory, MetricDefinition, MetricValue, PhotoRecord, Transaction,
 } from './types'
 
-export const FORMAT_VERSION = 4
+export const FORMAT_VERSION = 5
 
 /** Фото в backup.json — без байтов; file — путь в zip, у удалённого null. */
 export type PhotoMeta = Omit<PhotoRecord, 'bytes'> & { file: string | null }
@@ -197,10 +198,13 @@ export function buildExportZip(s: DiarySnapshot, now: Date): { fileName: string;
   // JPEG уже сжат: кладём без повторного сжатия
   const photos: Zippable = {}
   for (const p of s.photos) if (!p.deletedAt) photos[photoPath(p.id)] = [p.bytes, { level: 0 }]
+  const people: Zippable = {}
+  for (const [path, text] of Object.entries(buildPeopleFiles(s, now))) people[path] = strToU8(text)
   const bytes = zipSync({
     'backup.json': strToU8(JSON.stringify(backup, null, 2)),
     [`entries_${from}_${to}.md`]: strToU8(renderMarkdown(s, changed, logicalDay(now, s.meta.boundaryHour))),
     ...photos,
+    ...people,
   })
   return { fileName: `diary-${today}.zip`, bytes }
 }

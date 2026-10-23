@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { FORMAT_VERSION, buildExportZip, financeLines, metricsLine, renderMarkdown, selectChangedDays } from './exportFormat'
 import { DEFAULT_CATEGORIES } from './finance'
 import { DEFAULT_METRICS } from './metrics'
-import { EMPTY_PEOPLE, T0, dayRec, goalRec, photoRec, reviewRec, txRec } from './testFixtures'
+import { EMPTY_PEOPLE, T0, dayRec, goalRec, personRec, photoRec, reviewRec, txRec } from './testFixtures'
 import type { DiarySnapshot, MetricDefinition } from './types'
 
 const defs = DEFAULT_METRICS
@@ -138,7 +138,7 @@ describe('renderMarkdown', () => {
       'Траты: 800 ₽ — Продукты 800', 'Отложил: 10 000 ₽ (с зарплаты)', 'Взял: 3 000 ₽',
     ])
   })
-  it('formatVersion 4', () => expect(FORMAT_VERSION).toBe(4))
+  it('formatVersion 5', () => expect(FORMAT_VERSION).toBe(5))
   it('разборы после текста дня: пустые строки пропускаются, пустой и удалённый разбор не выводятся', () => {
     const first = reviewRec('2026-10-17', {
       text: ' Йогурт «Белое облако», полка у дома ', verdict: 'Наполовину', createdAt: '2026-10-17T21:00:00.000+03:00',
@@ -226,12 +226,12 @@ describe('buildExportZip', () => {
   it('архив по дате и два файла с латинскими именами', () => {
     const { fileName, bytes } = buildExportZip(snapshot, now)
     expect(fileName).toBe('diary-2026-10-06.zip')
-    expect(Object.keys(unzipSync(bytes)).sort()).toEqual(['backup.json', 'entries_2026-10-01_2026-10-06.md'])
+    expect(Object.keys(unzipSync(bytes)).sort()).toEqual(['backup.json', 'entries_2026-10-01_2026-10-06.md', 'people/index.md'])
   })
   it('backup.json — весь дневник с formatVersion и exportedAt со смещением', () => {
     const files = unzipSync(buildExportZip(snapshot, now).bytes)
     const backup = JSON.parse(strFromU8(files['backup.json']))
-    expect(backup.formatVersion).toBe(4)
+    expect(backup.formatVersion).toBe(5)
     expect(backup.exportedAt).toMatch(/^2026-10-06T22:15:00\.000[+-]\d{2}:\d{2}$/)
     expect(backup.days).toEqual(snapshot.days)
     expect(backup.metricDefinitions).toEqual(snapshot.metricDefinitions)
@@ -240,7 +240,15 @@ describe('buildExportZip', () => {
     expect(backup.transactions).toEqual([])
     expect(backup.goals).toEqual([])
     expect(backup.photos).toEqual([])
+    expect(backup.people).toEqual([])
     expect(backup.meta).toEqual(snapshot.meta)
+  })
+  it('люди — в backup.json и папкой people/', () => {
+    const ivan = personRec({ id: '1a2b3c4d-0000-4000-8000-000000000001', name: 'Иван Петров' })
+    const files = unzipSync(buildExportZip({ ...snapshot, people: [ivan] }, now).bytes)
+    expect(Object.keys(files)).toContain('people/ivan-petrov-1a2b3c4d.md')
+    expect(strFromU8(files['people/index.md'])).toContain('Всего: 1')
+    expect(JSON.parse(strFromU8(files['backup.json'])).people).toEqual([ivan])
   })
   it('фото: живые — файлами photos/<id>.jpg, в backup.json — метаданные без байтов', () => {
     const review = reviewRec('2026-10-06', { text: 'Йогурт' })

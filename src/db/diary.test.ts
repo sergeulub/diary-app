@@ -7,7 +7,7 @@ import { DEFAULT_CATEGORIES, createTransaction } from '../domain/finance'
 import { createGoal } from '../domain/goals'
 import { parseImport, planImport } from '../domain/importFormat'
 import { DEFAULT_METRICS } from '../domain/metrics'
-import { T0, dayRec, goalRec, txRec } from '../domain/testFixtures'
+import { T0, dayRec, eventRec, goalRec, linkRec, noteRec, personRec, txRec } from '../domain/testFixtures'
 import { db } from './database'
 import {
   applyImport, exportSnapshot, getDay, getFinanceCategories, getMeta, getMetrics, initDb, listDays, listFilledDays,
@@ -139,6 +139,29 @@ describe('экспорт → чистая база → импорт', () => {
     expect(await listTransactions('2026-10-01', '2026-10-31')).toEqual([tx])
     expect(await listGoals('2026-11')).toEqual([goal])
     expect((await getFinanceCategories()).find((c) => c.key === 'groceries')?.name).toBe('Еда')
+  })
+  it('возвращает людей, записи, события и связи', async () => {
+    const people = {
+      people: [personRec({ id: 'ivan' }), personRec({ id: 'anna', name: 'Анна Смирнова' })],
+      personNotes: [noteRec('ivan', { original: 'Заметка' })],
+      events: [eventRec({ id: 'e1' })],
+      personLinks: [linkRec('anna', 'ivan')],
+    }
+    const json = JSON.stringify(buildBackup({ ...(await exportSnapshot()), ...people }, isoWithOffset(at(6))))
+    await freshDb()
+    await applyImport(planImport(await exportSnapshot(), parseImport(json)))
+    const after = await exportSnapshot()
+    expect(after.people.sort((a, b) => a.id.localeCompare(b.id))).toEqual([...people.people].sort((a, b) => a.id.localeCompare(b.id)))
+    expect(after.personNotes).toEqual(people.personNotes)
+    expect(after.events).toEqual(people.events)
+    expect(after.personLinks).toEqual(people.personLinks)
+  })
+  it('бэкап формата 4 не трогает круги по умолчанию', async () => {
+    const v4 = { ...buildBackup(await exportSnapshot(), isoWithOffset(at(6))), formatVersion: 4 } as Record<string, unknown>
+    for (const key of ['people', 'personNotes', 'events', 'spheres', 'circles', 'personLinks']) delete v4[key]
+    await freshDb()
+    await applyImport(planImport(await exportSnapshot(), parseImport(JSON.stringify(v4))))
+    expect((await exportSnapshot()).circles).toHaveLength(4)
   })
 })
 

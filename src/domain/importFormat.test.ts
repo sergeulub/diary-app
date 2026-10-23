@@ -4,7 +4,7 @@ import { buildBackup, buildExportZip } from './exportFormat'
 import { ImportError, describeImport, extractArchive, extractBackupJson, importSize, parseImport, planImport } from './importFormat'
 import { DEFAULT_METRICS, SEED_TIME } from './metrics'
 import { DEFAULT_CATEGORIES } from './finance'
-import { EMPTY_PEOPLE, dayRec, goalRec, photoRec, reviewRec, txRec } from './testFixtures'
+import { EMPTY_PEOPLE, dayRec, eventRec, goalRec, linkRec, noteRec, personRec, photoRec, reviewRec, sphereRec, txRec } from './testFixtures'
 import type { DiarySnapshot } from './types'
 
 const meta = { boundaryHour: 6, lastExportAt: null, schemaVersion: 1 }
@@ -43,8 +43,8 @@ describe('parseImport', () => {
     expect(() => parseImport('{"days":[]}')).toThrow(/не похож на бэкап/)
   })
   it('будущая formatVersion отклоняется с просьбой обновиться', () => {
-    expect(() => parseImport(JSON.stringify({ ...JSON.parse(json(snapshot())), formatVersion: 5 }))).toThrow(
-      /более новой версией приложения \(формат 5\)/,
+    expect(() => parseImport(JSON.stringify({ ...JSON.parse(json(snapshot())), formatVersion: 6 }))).toThrow(
+      /более новой версией приложения \(формат 6\)/,
     )
   })
   it('недопустимое значение метрики называет день и метрику', () => {
@@ -262,5 +262,60 @@ describe('бэкап v3: разборы и фото', () => {
     const v2 = { ...JSON.parse(json(snapshot())), formatVersion: 2 }
     delete v2.photos
     expect(parseImport(JSON.stringify(v2)).photos).toEqual([])
+  })
+})
+
+describe('бэкап v5: люди', () => {
+  const ivan = personRec({ id: 'ivan', contacts: [{ type: 'telegram', value: '@ivan' }], sphereKeys: ['s1'] })
+  const people = {
+    people: [ivan, personRec({ id: 'anna', name: 'Анна Смирнова' })],
+    personNotes: [noteRec('ivan', { original: 'Заметка' }), noteRec('ivan', { kind: 'diary', talk: 'Кино' })],
+    events: [eventRec({ id: 'e1' })],
+    spheres: [sphereRec('s1', 'консалтинг')],
+    circles: [{ key: 'own', name: 'Свой круг', order: 5, archived: false, createdAt: '2026-10-01T22:00:00.000+03:00', updatedAt: '2026-10-01T22:00:00.000+03:00', deletedAt: null }],
+    personLinks: [linkRec('anna', 'ivan')],
+  }
+  it('файл формата 4 без людей читается: все шесть таблиц пустые', () => {
+    const v4 = { ...JSON.parse(json(snapshot())), formatVersion: 4 }
+    for (const key of Object.keys(EMPTY_PEOPLE)) delete v4[key]
+    const backup = parseImport(JSON.stringify(v4))
+    expect(Object.fromEntries(Object.keys(EMPTY_PEOPLE).map((k) => [k, backup[k as keyof typeof EMPTY_PEOPLE]]))).toEqual(EMPTY_PEOPLE)
+  })
+  it('туда и обратно без потерь', () => {
+    const backup = parseImport(json(snapshot(people)))
+    for (const key of Object.keys(EMPTY_PEOPLE) as (keyof typeof EMPTY_PEOPLE)[]) expect(backup[key]).toEqual(people[key])
+  })
+  it('человек без имени — отказ с номером', () => {
+    const raw = JSON.parse(json(snapshot(people)))
+    delete raw.people[0].name
+    expect(() => parseImport(JSON.stringify(raw))).toThrow(new ImportError('Человек №1: не хватает полей или они неверного типа'))
+  })
+  it('запись о человеке неизвестного вида — отказ', () => {
+    const raw = JSON.parse(json(snapshot(people)))
+    raw.personNotes[1].kind = 'call'
+    expect(() => parseImport(JSON.stringify(raw))).toThrow('Запись о человеке №2: не хватает полей или они неверного типа')
+  })
+  it('контакт неизвестного типа — отказ', () => {
+    const raw = JSON.parse(json(snapshot(people)))
+    raw.people[0].contacts[0].type = 'fax'
+    expect(() => parseImport(JSON.stringify(raw))).toThrow('Человек №1: не хватает полей или они неверного типа')
+  })
+  it('недостающие текстовые поля записи становятся пустыми', () => {
+    const raw = JSON.parse(json(snapshot(people)))
+    delete raw.personNotes[0].patchId
+    delete raw.personNotes[0].life
+    expect(parseImport(JSON.stringify(raw)).personNotes[0]).toMatchObject({ patchId: '', life: '' })
+  })
+  it('сводка называет людей, записи о людях и события', () => {
+    const plan = planImport(snapshot(), parseImport(json(snapshot(people))))
+    const text = describeImport(plan)
+    expect(text).toContain('Людей: будет добавлено 2, обновлено 0.')
+    expect(text).toContain('Записей о людях: будет добавлено 2, обновлено 0.')
+    expect(text).toContain('Событий: будет добавлено 1, обновлено 0.')
+  })
+  it('свежий updatedAt у человека — обновление', () => {
+    const newer = { ...ivan, company: 'Кедр Консалтинг', updatedAt: '2026-10-25T23:00:00.000+03:00' }
+    const plan = planImport(snapshot(people), parseImport(json(snapshot({ ...people, people: [newer] }))))
+    expect(plan.people).toMatchObject({ added: 0, updated: 1, put: [newer] })
   })
 })
