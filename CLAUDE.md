@@ -108,3 +108,11 @@
   «Взял» (без категорий), плюс баланс «Всего в накоплениях»; `formatVersion: 4`. Спецификация
   `docs/superpowers/specs/2026-10-17-savings-design.md`, план `docs/superpowers/plans/2026-10-17-savings.md`, макет —
   артборд «8 · Накопления».
+- [23.10.2026] **Модуль «Люди» (версия 1.5.0) — в работе, ветка `feature/people`, в `main` не слит и не опубликован.**
+  ТЗ `docs/superpowers/specs/2026-10-22-contacts-crm-design.md` (ревизия 23.10 по комментариям к макетам). Макеты 9–14
+  в холсте Claude Design одобрены (олива, лента-хроника, фильтры одной кнопкой, без поясняющих надписей).
+  Б0 шаг 2 (данные) **готов**: схема v4, `formatVersion: 5`, `src/domain/people*.ts`, `src/db/people.ts`, 415 тестов;
+  план и итоги (решения, отложенные мелочи) — `docs/superpowers/plans/2026-10-23-people-data.md`.
+  **Следующий шаг — Б0 шаг 3, экраны:** выполнять `docs/superpowers/plans/2026-10-23-people-screens.md` с задачи 1
+  (навык `superpowers:executing-plans`, ветка `feature/people`). Публикация (задача 9) — только после «да» пользователя;
+  локальный хук `.git/hooks/pre-push` блокирует push со словами из `.git/info/private-terms`.
