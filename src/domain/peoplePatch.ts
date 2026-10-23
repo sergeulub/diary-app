@@ -1,5 +1,5 @@
-import type { PersonFields } from './people'
-import type { Contact, ContactType, PersonNote, PersonNoteKind } from './types'
+import { CONTACT_LABELS, findByName, foldText, isLive, type PersonFields } from './people'
+import type { AppliedPatch, Contact, ContactType, PeopleData, Person, PersonNote, PersonNoteKind } from './types'
 
 /** Ошибка файла изменений с текстом для пользователя. */
 export class PatchError extends Error {}
@@ -180,4 +180,177 @@ function fnv1a(s: string): string {
 export function derivedId(seed: string): string {
   const hex = [0, 1, 2, 3].map((k) => fnv1a(`${seed}#${k}`)).join('')
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+export type OpStatus = 'ok' | 'conflict' | 'blocked'
+
+export interface PlannedOp {
+  index: number
+  op: PatchOp
+  status: OpStatus
+  reason: string
+  /** id или tempId человека — для группировки; '' у операций со сферами. */
+  personId: string
+  /** «Было» и «станет» по именам полей, строками для показа. */
+  before: Record<string, string>
+  after: Record<string, string>
+  editable: boolean
+  /** tempId новых людей, без которых операция не применяется. */
+  dependsOn: string[]
+}
+
+export interface PatchPlan {
+  patch: PeoplePatch
+  ops: PlannedOp[]
+  alreadyApplied: boolean
+}
+
+/** Решение пользователя по операции: галочка и правка (та же форма, что у предложения файла). */
+export interface Decision {
+  selected: boolean
+  set?: Record<string, unknown>
+}
+export type Decisions = Record<number, Decision>
+
+const GONE = 'Удалён в телефоне — применить нельзя'
+const CHANGED = 'Изменена в телефоне после выгрузки'
+const EDITABLE = new Set<PatchOp['op']>(['createPerson', 'updatePerson', 'updateNote', 'addNote', 'upsertDiaryNote', 'renameSphere'])
+
+const sameMoment = (a: string, b: string) => Date.parse(a) === Date.parse(b)
+const contactsText = (cs: Contact[]) => cs.map((c) => `${CONTACT_LABELS[c.type]} ${c.value}`).join(' · ')
+
+/** Значение поля карточки строкой — так же, как его показывает предпросмотр. */
+function personValue(field: string, p: Person, data: PeopleData): string {
+  switch (field) {
+    case 'aliases': return p.aliases.join(', ')
+    case 'spheres': return p.sphereKeys.flatMap((k) => data.spheres.find((s) => s.key === k)?.name ?? []).join(', ')
+    case 'circle': return data.circles.find((c) => c.key === p.circleKey)?.name ?? ''
+    case 'contacts': return contactsText(p.contacts)
+    case 'archived': return p.archived ? 'да' : 'нет'
+    default: return String(p[field as keyof Person] ?? '')
+  }
+}
+
+function inputValue(field: string, value: unknown): string {
+  if (field === 'contacts') return contactsText(value as Contact[])
+  if (Array.isArray(value)) return value.join(', ')
+  if (typeof value === 'boolean') return value ? 'да' : 'нет'
+  return String(value ?? '')
+}
+
+const inputText = (input: Record<string, unknown>) =>
+  Object.fromEntries(Object.entries(input).filter(([k]) => k !== 'kind').map(([k, v]) => [k, inputValue(k, v)]))
+
+/** Сферы и круг сопоставляются по названию без учёта регистра. */
+const sameValue = (field: string, a: string, b: string) =>
+  field === 'spheres' || field === 'circle' ? foldText(a) === foldText(b) : a === b
+const isNoop = (before: Record<string, string>, after: Record<string, string>) =>
+  Object.keys(after).every((k) => sameValue(k, before[k] ?? '', after[k]))
+
+export function planPatch(patch: PeoplePatch, data: PeopleData, applied: AppliedPatch[]): PatchPlan {
+  const livePerson = (id: string) => data.people.find((p) => p.id === id && isLive(p))
+  const newNames = new Map(patch.ops.flatMap((o) => (o.op === 'createPerson' ? [[o.tempId, o.person.name] as const] : [])))
+  const nameOf = (ref: string) => (isTempId(ref) ? newNames.get(ref) : livePerson(ref)?.name) ?? ''
+  /** Ссылка на человека: новый из файла — годится, существующий — только живой. */
+  const refOk = (ref: string) => isTempId(ref) || !!livePerson(ref)
+
+  const ops = patch.ops.map((op, index): PlannedOp => {
+    let status: OpStatus = 'ok'
+    let reason = ''
+    let personId = ''
+    let before: Record<string, string> = {}
+    let after: Record<string, string> = {}
+    const block = (why: string) => { status = 'blocked'; reason = why }
+    const conflict = () => { status = 'conflict'; reason = CHANGED }
+    switch (op.op) {
+      case 'createPerson':
+        personId = op.tempId
+        after = inputText(op.person)
+        break
+      case 'updatePerson': {
+        personId = op.id
+        after = inputText(op.set)
+        const p = livePerson(op.id)
+        if (!p) { block(GONE); break }
+        before = Object.fromEntries(Object.keys(after).map((k) => [k, personValue(k, p, data)]))
+        if (!isNoop(before, after) && !sameMoment(p.updatedAt, op.baseUpdatedAt)) conflict()
+        break
+      }
+      case 'updateNote': {
+        after = inputText(op.set)
+        const n = data.personNotes.find((x) => x.id === op.id && isLive(x))
+        personId = n?.personId ?? ''
+        if (!n || !livePerson(n.personId)) { block(GONE); break }
+        before = Object.fromEntries(Object.keys(after).map((k) => [k, String(n[k as keyof PersonNote] ?? '')]))
+        if (!isNoop(before, after) && n.patchId !== patch.id && !sameMoment(n.updatedAt, op.baseUpdatedAt)) conflict()
+        break
+      }
+      case 'addNote':
+        personId = op.personId
+        after = inputText(op.note)
+        if (!refOk(op.personId)) block(GONE)
+        break
+      case 'upsertDiaryNote': {
+        personId = op.personId
+        after = { day: op.day, talk: op.talk }
+        if (!refOk(op.personId)) { block(GONE); break }
+        const n = data.personNotes.find((x) => x.personId === op.personId && x.kind === 'diary' && x.day === op.day && isLive(x))
+        if (!n) break
+        before = { day: n.day, talk: n.talk }
+        if (n.talk !== op.talk && n.patchId !== patch.id && Date.parse(n.updatedAt) > Date.parse(patch.basedOnExportAt)) conflict()
+        break
+      }
+      case 'mergePeople': {
+        personId = op.intoId
+        const from = livePerson(op.fromId)
+        const into = livePerson(op.intoId)
+        if (!from || !into) { block(GONE); break }
+        if (from.id === into.id) { block('Нельзя объединить человека с самим собой'); break }
+        before = { name: from.name }
+        after = { name: into.name }
+        if (!sameMoment(from.updatedAt, op.baseUpdatedAt.from) || !sameMoment(into.updatedAt, op.baseUpdatedAt.into)) conflict()
+        break
+      }
+      case 'linkPeople':
+        personId = op.a
+        after = { a: nameOf(op.a), b: nameOf(op.b) }
+        if (!refOk(op.a) || !refOk(op.b)) block(GONE)
+        else if (op.a === op.b) block('Нельзя связать человека с самим собой')
+        break
+      case 'renameSphere': {
+        before = { name: op.name }
+        after = { name: op.newName }
+        const s = findByName(op.name, data.spheres)
+        const other = findByName(op.newName, data.spheres)
+        if (!s) block(`Сферы «${op.name}» нет`)
+        else if (other && other.key !== s.key) block(`Сфера «${op.newName}» уже есть — объедините их`)
+        break
+      }
+      case 'mergeSpheres': {
+        before = { name: op.from }
+        after = { name: op.into }
+        const from = findByName(op.from, data.spheres)
+        const into = findByName(op.into, data.spheres)
+        if (!from) block(`Сферы «${op.from}» нет`)
+        else if (!into) block(`Сферы «${op.into}» нет`)
+        else if (from.key === into.key) block(`«${op.from}» и «${op.into}» — одна и та же сфера`)
+        break
+      }
+    }
+    const dependsOn = [...new Set(personRefs(op).filter(isTempId))]
+    return { index, op, status, reason, personId, before, after, editable: EDITABLE.has(op.op), dependsOn }
+  })
+  return { patch, ops, alreadyApplied: applied.some((a) => a.id === patch.id) }
+}
+
+/** По умолчанию отмечены операции без конфликтов. */
+export function defaultDecisions(plan: PatchPlan): Decisions {
+  return Object.fromEntries(plan.ops.map((o) => [o.index, { selected: o.status === 'ok' }]))
+}
+
+/** Что применится на самом деле: заблокированные — никогда; зависящие от снятого нового человека — нет. */
+export function effectiveSelection(plan: PatchPlan, decisions: Decisions): boolean[] {
+  const chosen = (o: PlannedOp) => o.status !== 'blocked' && (decisions[o.index]?.selected ?? o.status === 'ok')
+  const created = new Set(plan.ops.filter((o) => o.op.op === 'createPerson' && chosen(o)).map((o) => o.personId))
+  return plan.ops.map((o) => chosen(o) && o.dependsOn.every((t) => created.has(t)))
 }
