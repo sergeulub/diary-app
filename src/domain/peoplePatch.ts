@@ -1,5 +1,10 @@
-import { CONTACT_LABELS, findByName, foldText, isLive, type PersonFields } from './people'
-import type { AppliedPatch, Contact, ContactType, PeopleData, Person, PersonNote, PersonNoteKind } from './types'
+import {
+  CONTACT_LABELS, createNote, createPerson, findByName, foldText, isLive, linkPair, mergeSphere, updateNote, updatePerson,
+  type PersonFields,
+} from './people'
+import type {
+  AppliedPatch, Circle, Contact, ContactType, PeopleData, Person, PersonLink, PersonNote, PersonNoteKind, Sphere,
+} from './types'
 
 /** Ошибка файла изменений с текстом для пользователя. */
 export class PatchError extends Error {}
@@ -353,4 +358,185 @@ export function effectiveSelection(plan: PatchPlan, decisions: Decisions): boole
   const chosen = (o: PlannedOp) => o.status !== 'blocked' && (decisions[o.index]?.selected ?? o.status === 'ok')
   const created = new Set(plan.ops.filter((o) => o.op.op === 'createPerson' && chosen(o)).map((o) => o.personId))
   return plan.ops.map((o) => chosen(o) && o.dependsOn.every((t) => created.has(t)))
+}
+
+export interface PatchCounts {
+  applied: number
+  /** Из применённых — с правкой пользователя. */
+  edited: number
+  skipped: number
+}
+
+export interface PatchResult {
+  /** Только созданные и изменённые записи; события файл не трогает. */
+  changes: PeopleData
+  applied: AppliedPatch
+  counts: PatchCounts
+}
+
+const MERGED_TEXT = ['company', 'position', 'about', 'canHelp', 'iCanHelp', 'personal'] as const
+const uniq = <T>(xs: T[]) => [...new Set(xs)]
+
+/** Рабочая копия таблицы: изменения видны следующим операциям и собираются в результат. */
+function table<T>(rows: T[], key: (x: T) => string) {
+  const all = new Map(rows.map((x) => [key(x), x]))
+  const touched = new Set<string>()
+  return {
+    get: (k: string) => all.get(k),
+    values: () => [...all.values()],
+    put: (x: T) => { all.set(key(x), x); touched.add(key(x)) },
+    changed: () => [...touched].map((k) => all.get(k)!),
+  }
+}
+
+/**
+ * Применяет выбранные операции по порядку файла. Id создаваемых записей выводятся из id файла и номера операции,
+ * поэтому повторное применение перезаписывает, а не дублирует.
+ */
+export function applyPlan(plan: PatchPlan, decisions: Decisions, data: PeopleData, now: string): PatchResult {
+  const { patch } = plan
+  const selected = effectiveSelection(plan, decisions)
+  const people = table(data.people, (p) => p.id)
+  const notes = table(data.personNotes, (n) => n.id)
+  const spheres = table(data.spheres, (s) => s.key)
+  const circles = table(data.circles, (c) => c.key)
+  const links = table(data.personLinks, (l) => l.id)
+  const opId = (index: number) => derivedId(`${patch.id}:${index}`)
+  const tempIds = new Map(plan.ops.flatMap((o) => (o.op.op === 'createPerson' ? [[o.op.tempId, opId(o.index)] as const] : [])))
+  const resolve = (ref: string) => tempIds.get(ref) ?? ref
+
+  const sphereKey = (name: string): string => {
+    const found = findByName(name, spheres.values())
+    if (found) return found.key
+    const key = derivedId(`sphere:${foldText(name.trim())}`)
+    const s: Sphere = { key, name: name.trim(), createdAt: spheres.get(key)?.createdAt ?? now, updatedAt: now, deletedAt: null }
+    spheres.put(s)
+    return key
+  }
+  const circleKey = (name: string): string => {
+    if (!name.trim()) return ''
+    const found = findByName(name, circles.values())
+    if (found) return found.key
+    const key = derivedId(`circle:${foldText(name.trim())}`)
+    const order = Math.max(0, ...circles.values().map((c) => c.order)) + 1
+    const c: Circle = { key, name: name.trim(), order, archived: false, createdAt: circles.get(key)?.createdAt ?? now, updatedAt: now, deletedAt: null }
+    circles.put(c)
+    return key
+  }
+  const toFields = ({ spheres: names, circle, ...rest }: PersonInput): Partial<PersonFields> => ({
+    ...rest,
+    ...(names ? { sphereKeys: uniq(names.filter((n) => n.trim()).map(sphereKey)) } : {}),
+    ...(circle !== undefined ? { circleKey: circleKey(circle) } : {}),
+  })
+  const noteFields = (n: NoteInput) => ({
+    ...(n.day !== undefined ? { day: n.day } : {}),
+    ...Object.fromEntries((['occasion', 'talk', 'life', 'agreements', 'original'] as const).flatMap((k) => (n[k] !== undefined ? [[k, n[k]]] : []))),
+  })
+
+  const mergeInto = (fromId: string, intoId: string) => {
+    const from = people.get(fromId)
+    const into = people.get(intoId)
+    if (!from || !into || !isLive(from) || !isLive(into)) return
+    const texts = Object.fromEntries(MERGED_TEXT.map((k) => {
+      const a = into[k].trim()
+      const b = from[k].trim()
+      return [k, !a ? from[k] : !b || a === b ? into[k] : `${into[k]}\n${from[k]}`]
+    }))
+    const contacts = [...into.contacts, ...from.contacts]
+      .filter((c, i, all) => all.findIndex((x) => x.type === c.type && x.value === c.value) === i)
+    people.put({
+      ...into, ...texts, contacts,
+      aliases: uniq([...into.aliases, ...(from.name !== into.name ? [from.name] : []), ...from.aliases]).filter((a) => a !== into.name),
+      sphereKeys: uniq([...into.sphereKeys, ...from.sphereKeys]),
+      circleKey: into.circleKey || from.circleKey,
+      updatedAt: now,
+    })
+    people.put({ ...from, deletedAt: now, updatedAt: now })
+    for (const n of notes.values()) if (n.personId === fromId) notes.put({ ...n, personId: intoId, updatedAt: now })
+    for (const l of links.values()) {
+      if (!isLive(l) || (l.a !== fromId && l.b !== fromId)) continue
+      const pair = linkPair(intoId, l.a === fromId ? l.b : l.a)
+      const dup = pair && links.values().some((x) => x.id !== l.id && isLive(x) && x.a === pair[0] && x.b === pair[1])
+      links.put(!pair || dup ? { ...l, deletedAt: now, updatedAt: now } : { ...l, a: pair[0], b: pair[1], updatedAt: now })
+    }
+  }
+
+  plan.ops.forEach((po, i) => {
+    if (!selected[i]) return
+    const edit = decisions[po.index]?.set
+    const op = po.op
+    switch (op.op) {
+      case 'createPerson': {
+        const input = { ...op.person, ...(edit as PersonInput | undefined) }
+        const id = opId(po.index)
+        const name = input.name?.trim() ? input.name : op.person.name
+        people.put({ ...createPerson({ ...toFields(input), name }, now), id, createdAt: people.get(id)?.createdAt ?? now })
+        break
+      }
+      case 'updatePerson': {
+        const p = people.get(op.id)
+        if (p && isLive(p)) people.put(updatePerson(p, toFields({ ...op.set, ...(edit as PersonInput | undefined) }), now))
+        break
+      }
+      case 'updateNote': {
+        const n = notes.get(op.id)
+        if (n && isLive(n)) notes.put({ ...updateNote(n, noteFields({ ...op.set, ...(edit as NoteInput | undefined) }), now), patchId: patch.id })
+        break
+      }
+      case 'addNote': {
+        const input = { ...op.note, ...(edit as NoteInput | undefined) }
+        const id = opId(po.index)
+        const n = createNote(resolve(op.personId), op.note.kind, { ...noteFields(input), day: input.day ?? op.note.day }, now)
+        notes.put({ ...n, id, patchId: patch.id, createdAt: notes.get(id)?.createdAt ?? now })
+        break
+      }
+      case 'upsertDiaryNote': {
+        const personId = resolve(op.personId)
+        const talk = typeof edit?.talk === 'string' ? edit.talk : op.talk
+        const existing = notes.values().find((n) => n.personId === personId && n.kind === 'diary' && n.day === op.day && isLive(n))
+        if (existing) notes.put({ ...existing, talk, patchId: patch.id, updatedAt: now })
+        else notes.put({ ...createNote(personId, 'diary', { day: op.day, talk }, now), id: opId(po.index), patchId: patch.id })
+        break
+      }
+      case 'mergePeople':
+        mergeInto(op.fromId, op.intoId)
+        break
+      case 'linkPeople': {
+        const pair = linkPair(resolve(op.a), resolve(op.b))
+        if (!pair || links.values().some((l) => isLive(l) && l.a === pair[0] && l.b === pair[1])) break
+        const id = derivedId(`link:${pair[0]}:${pair[1]}`)
+        const link: PersonLink = { id, a: pair[0], b: pair[1], createdAt: links.get(id)?.createdAt ?? now, updatedAt: now, deletedAt: null }
+        links.put(link)
+        break
+      }
+      case 'renameSphere': {
+        const s = findByName(op.name, spheres.values())
+        const newName = typeof edit?.newName === 'string' && edit.newName.trim() ? edit.newName : op.newName
+        if (s) spheres.put({ ...s, name: newName.trim(), updatedAt: now })
+        break
+      }
+      case 'mergeSpheres': {
+        const from = findByName(op.from, spheres.values())
+        const into = findByName(op.into, spheres.values())
+        if (!from || !into || from.key === into.key) break
+        for (const p of mergeSphere(from.key, into.key, people.values(), now)) people.put(p)
+        spheres.put({ ...from, deletedAt: now, updatedAt: now })
+        break
+      }
+    }
+  })
+
+  const applied = selected.filter(Boolean).length
+  return {
+    changes: {
+      people: people.changed(), personNotes: notes.changed(), events: [], spheres: spheres.changed(),
+      circles: circles.changed(), personLinks: links.changed(),
+    },
+    applied: { id: patch.id, appliedAt: now, basedOnExportAt: patch.basedOnExportAt },
+    counts: {
+      applied,
+      edited: plan.ops.filter((o, i) => selected[i] && decisions[o.index]?.set).length,
+      skipped: plan.ops.length - applied,
+    },
+  }
 }

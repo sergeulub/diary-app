@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_CIRCLES } from './people'
 import {
   PatchError, defaultDecisions, derivedId, effectiveSelection, isPeoplePatchJson, parsePeoplePatch, planPatch,
   type PeoplePatch,
 } from './peoplePatch'
-import { EMPTY_PEOPLE, T0, noteRec, personRec, samplePatch, sphereRec } from './testFixtures'
+import { T0, noteRec, patchData, samplePatch } from './testFixtures'
 import type { AppliedPatch, PeopleData } from './types'
 
 const parse = (x: unknown) => () => parsePeoplePatch(JSON.stringify(x))
@@ -92,21 +91,6 @@ describe('derivedId', () => {
 })
 
 const LATER = '2026-10-26T09:00:00.000+03:00'
-
-/** Телефон к моменту файла samplePatch: всё не менялось после выгрузки. */
-function patchData(): PeopleData {
-  return {
-    ...EMPTY_PEOPLE,
-    people: [
-      personRec({ id: 'ivan', name: 'Иван Петров', position: 'Партнёр' }),
-      personRec({ id: 'dima', name: 'Дмитрий', aliases: ['Дима из клуба'] }),
-      personRec({ id: 'dmitry', name: 'Дмитрий Соколов' }),
-    ],
-    personNotes: [noteRec('ivan', { id: 'note-ivan', original: 'Заметка' })],
-    spheres: [sphereRec('s-kons', 'консалтинг'), sphereRec('s-konsalt', 'консалт')],
-    circles: DEFAULT_CIRCLES,
-  }
-}
 
 const sample = (): PeoplePatch => parsePeoplePatch(JSON.stringify(samplePatch()))
 const statusOf = (patch: PeoplePatch, data: PeopleData) => planPatch(patch, data, []).ops.map((o) => o.status)

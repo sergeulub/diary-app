@@ -1,3 +1,4 @@
+import { DEFAULT_CIRCLES } from './people'
 import type {
   DayRecord, EntryRecord, Goal, PeopleData, PeopleEvent, Person, PersonLink, PersonNote, PhotoRecord, Sphere, Transaction,
 } from './types'
@@ -94,5 +95,20 @@ export function samplePatch(): Record<string, unknown> & { ops: Record<string, u
       { op: 'renameSphere', name: 'Консалтинг', newName: 'консалтинг' },
       { op: 'mergeSpheres', from: 'консалт', into: 'консалтинг' },
     ],
+  }
+}
+
+/** Телефон к моменту файла samplePatch: всё не менялось после выгрузки. */
+export function patchData(): PeopleData {
+  return {
+    ...EMPTY_PEOPLE,
+    people: [
+      personRec({ id: 'ivan', name: 'Иван Петров', position: 'Партнёр' }),
+      personRec({ id: 'dima', name: 'Дмитрий', aliases: ['Дима из клуба'] }),
+      personRec({ id: 'dmitry', name: 'Дмитрий Соколов' }),
+    ],
+    personNotes: [noteRec('ivan', { id: 'note-ivan', original: 'Заметка' })],
+    spheres: [sphereRec('s-kons', 'консалтинг'), sphereRec('s-konsalt', 'консалт')],
+    circles: DEFAULT_CIRCLES,
   }
 }
