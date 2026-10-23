@@ -1,4 +1,6 @@
-import type { DayRecord, EntryRecord, Goal, PeopleData, PhotoRecord, Transaction } from './types'
+import type {
+  DayRecord, EntryRecord, Goal, PeopleData, PeopleEvent, Person, PersonLink, PersonNote, PhotoRecord, Sphere, Transaction,
+} from './types'
 
 export const T0 = '2026-10-01T22:00:00.000+03:00'
 
@@ -33,6 +35,38 @@ export function reviewRec(day: string, patch: Partial<EntryRecord> = {}): EntryR
     id: `entry-${++seq}`, day, kind: 'review', text: '', verdict: '', change: '',
     createdAt: T0, updatedAt: T0, deletedAt: null, ...patch,
   }
+}
+
+/** Человек «Иван Петров» без остальных полей — «не дополнено». */
+export function personRec(patch: Partial<Person> = {}): Person {
+  return {
+    id: `person-${++seq}`, name: 'Иван Петров', aliases: [], company: '', position: '', about: '', sphereKeys: [],
+    circleKey: '', canHelp: '', iCanHelp: '', personal: '', contacts: [], archived: false,
+    createdAt: T0, updatedAt: T0, deletedAt: null, ...patch,
+  }
+}
+
+/** Пустая встреча 25 октября. */
+export function noteRec(personId: string, patch: Partial<PersonNote> = {}): PersonNote {
+  return {
+    id: `note-${++seq}`, personId, kind: 'meeting', day: '2026-10-25', occasion: '', eventId: '', talk: '', life: '',
+    agreements: '', original: '', patchId: '', createdAt: T0, updatedAt: T0, deletedAt: null, ...patch,
+  }
+}
+
+export function eventRec(patch: Partial<PeopleEvent> = {}): PeopleEvent {
+  return {
+    id: `event-${++seq}`, day: '2026-10-25', title: 'Встреча клуба', topic: '',
+    createdAt: T0, updatedAt: T0, deletedAt: null, ...patch,
+  }
+}
+
+export function sphereRec(key: string, name: string, patch: Partial<Sphere> = {}): Sphere {
+  return { key, name, createdAt: T0, updatedAt: T0, deletedAt: null, ...patch }
+}
+
+export function linkRec(a: string, b: string, patch: Partial<PersonLink> = {}): PersonLink {
+  return { id: `link-${++seq}`, a, b, createdAt: T0, updatedAt: T0, deletedAt: null, ...patch }
 }
 
 /** Живое фото записи из трёх байтов. */
