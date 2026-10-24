@@ -11,6 +11,7 @@ import EventScreen from './EventScreen'
 import EventsScreen from './EventsScreen'
 import type { Nav, Screen } from './nav'
 import NoteForm, { type NoteTarget } from './NoteForm'
+import PatchScreen from './PatchScreen'
 import PeopleList from './PeopleList'
 import PeopleNav from './PeopleNav'
 import PersonCard from './PersonCard'
@@ -73,12 +74,7 @@ export default function PeopleApp({ meta, patchJson, onExit, onOpenDay }: {
           <EventScreen key={screen.id} data={data} id={screen.id} backLabel={backLabel} nav={nav} onEdit={() => setEventForm({ id: screen.id })} />
         )}
         {screen.kind === 'spheres' && <SpheresScreen data={data} backLabel={backLabel} nav={nav} />}
-        {screen.kind === 'patch' && (
-          <div className="mx-auto flex max-w-md flex-col gap-3.5 px-5 pt-[max(28px,env(safe-area-inset-top))] pb-6">
-            <button type="button" onClick={nav.back} className="self-start text-accent">‹ Назад</button>
-            <h1 className="font-serif text-[30px] font-semibold">{screen.kind}</h1>
-          </div>
-        )}
+        {screen.kind === 'patch' && <PatchScreen data={data} meta={meta} json={screen.json} backLabel={backLabel} nav={nav} />}
       </main>
       <PeopleNav
         active={root} onTab={(t) => setStack([{ kind: t }])} onExit={onExit}
