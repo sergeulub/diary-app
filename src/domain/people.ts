@@ -1,6 +1,7 @@
+import { monthOf } from './dates'
 import { SEED_TIME } from './metrics'
 import type {
-  AppliedPatch, Circle, ContactType, PeopleEvent, Person, PersonLink, PersonNote, PersonNoteKind, Sphere,
+  AppliedPatch, Circle, ContactType, PeopleData, PeopleEvent, Person, PersonLink, PersonNote, PersonNoteKind, Sphere,
 } from './types'
 
 const circle = (key: string, name: string, order: number): Circle =>
@@ -204,6 +205,42 @@ export function isSeenByClaude(n: PersonNote, applied: AppliedPatch[]): boolean 
   if (n.patchId) return true
   const last = lastApplied(applied)
   return !!last && byMoment(n.createdAt, last.basedOnExportAt) <= 0
+}
+
+/** Аватар: первые буквы двух первых слов имени. */
+export function initials(name: string): string {
+  return name.trim().split(/\s+/).slice(0, 2).map((w) => [...w][0]?.toUpperCase() ?? '').join('')
+}
+
+/** Числа карточки «Люди» в «Настройках»: живые люди с архивными, «не дополнено», неразобранные заметки. */
+export function peopleStats(data: PeopleData): { total: number; incomplete: number; unparsed: number } {
+  const people = data.people.filter(isLive)
+  const ids = new Set(people.map((p) => p.id))
+  return {
+    total: people.length,
+    incomplete: people.filter(isIncomplete).length,
+    unparsed: data.personNotes.filter((n) => ids.has(n.personId) && isLive(n) && isUnparsed(n)).length,
+  }
+}
+
+/** Сколько живых людей у каждой сферы или круга. */
+export function countByKey(people: Person[], pick: (p: Person) => string[]): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const p of people) if (isLive(p)) for (const k of pick(p)) counts.set(k, (counts.get(k) ?? 0) + 1)
+  return counts
+}
+
+/** Вкладка «События»: живые события по месяцам, свежие сверху, с числом людей. */
+export function eventsByMonth(
+  events: PeopleEvent[], notes: PersonNote[],
+): { month: string; items: { event: PeopleEvent; count: number }[] }[] {
+  const months = new Map<string, { event: PeopleEvent; count: number }[]>()
+  const sorted = events.filter(isLive).sort((a, b) => b.day.localeCompare(a.day) || byMoment(b.createdAt, a.createdAt))
+  for (const event of sorted) {
+    const month = monthOf(event.day)
+    months.set(month, [...(months.get(month) ?? []), { event, count: peopleOfEvent(event.id, notes).length }])
+  }
+  return [...months].map(([month, items]) => ({ month, items }))
 }
 
 /** Перед какой записью ленты рисовать полосу «разобрано Claude»; -1 — полосы нет. */

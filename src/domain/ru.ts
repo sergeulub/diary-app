@@ -10,6 +10,14 @@ const MONTHS_GENITIVE = [
   'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
 ]
 
+const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+
+/** «25 окт» — дата в строках списков и ленты. */
+export function shortDay(day: string): string {
+  const d = parseDay(day)
+  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`
+}
+
 /** Неделя с понедельника — для шапки календаря. */
 export const WEEKDAYS_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 

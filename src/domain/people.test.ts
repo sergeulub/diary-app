@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
-  claudeDividerIndex, createEvent, createNote, createPerson, createSphere, deleteNote, deletePerson, findByName,
-  findSimilar, foldText, isIncomplete, isSeenByClaude, isUnparsed, lastApplied, lastContactDay, linkPair, linkedIds,
-  meetingAtEvent, mergeSphere, metInfo, normalizeName, peopleOfEvent, personFeed, setLinks, updateNote, updatePerson,
+  claudeDividerIndex, countByKey, createEvent, createNote, createPerson, createSphere, deleteNote, deletePerson, findByName,
+  eventsByMonth, findSimilar, foldText, initials, isIncomplete, isSeenByClaude, isUnparsed, lastApplied, lastContactDay, linkPair, linkedIds,
+  meetingAtEvent, mergeSphere, metInfo, normalizeName, peopleOfEvent, peopleStats, personFeed, setLinks, updateNote,
+  updatePerson,
 } from './people'
-import { T0, eventRec, linkRec, noteRec, personRec, sphereRec } from './testFixtures'
+import { EMPTY_PEOPLE, T0, eventRec, linkRec, noteRec, personRec, sphereRec } from './testFixtures'
 import type { AppliedPatch } from './types'
 
 const NOW = '2026-10-25T23:00:00.000+03:00'
@@ -230,5 +231,41 @@ describe('полоса «разобрано Claude»', () => {
     const sameMoment = noteRec('x', { createdAt: '2026-10-21T23:00:00.000+03:00' })
     const utc: AppliedPatch[] = [{ id: 'p', appliedAt: NOW, basedOnExportAt: '2026-10-21T20:00:00.000Z' }]
     expect(isSeenByClaude(sameMoment, utc)).toBe(true)
+  })
+})
+
+describe('для экранов', () => {
+  it('initials — первые буквы двух первых слов', () => {
+    expect(initials(' анна  смирнова ')).toBe('АС')
+    expect(initials('Дмитрий')).toBe('Д')
+    expect(initials('Иван Сергеевич Петров')).toBe('ИС')
+  })
+  it('peopleStats пустой базы — нули', () => {
+    expect(peopleStats(EMPTY_PEOPLE)).toEqual({ total: 0, incomplete: 0, unparsed: 0 })
+  })
+  it('peopleStats: удалённые не считаются, архивные — да', () => {
+    const data = {
+      ...EMPTY_PEOPLE,
+      people: [personRec({ id: 'bare' }), personRec({ id: 'arch', company: 'Луч', archived: true }), personRec({ id: 'dead', deletedAt: NOW })],
+      personNotes: [noteRec('bare', { original: 'Заметка' }), noteRec('dead', { original: 'Заметка' })],
+    }
+    expect(peopleStats(data)).toEqual({ total: 2, incomplete: 1, unparsed: 1 })
+  })
+  it('countByKey — по живым людям', () => {
+    const people = [
+      personRec({ sphereKeys: ['a', 'b'] }), personRec({ sphereKeys: ['a'] }), personRec({ sphereKeys: ['a'], deletedAt: NOW }),
+    ]
+    const counts = countByKey(people, (p) => p.sphereKeys)
+    expect([counts.get('a'), counts.get('b'), counts.get('c')]).toEqual([2, 1, undefined])
+  })
+  it('eventsByMonth — свежие сверху, с числом людей', () => {
+    const events = [
+      eventRec({ id: 'e15', day: '2026-10-15' }), eventRec({ id: 'e25', day: '2026-10-25' }),
+      eventRec({ id: 'e12', day: '2026-09-12' }), eventRec({ id: 'gone', day: '2026-10-30', deletedAt: NOW }),
+    ]
+    const notes = [noteRec('p1', { eventId: 'e25' }), noteRec('p2', { eventId: 'e25' })]
+    const months = eventsByMonth(events, notes)
+    expect(months.map((m) => m.month)).toEqual(['2026-10', '2026-09'])
+    expect(months[0].items.map((i) => [i.event.id, i.count])).toEqual([['e25', 2], ['e15', 0]])
   })
 })
