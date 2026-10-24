@@ -9,7 +9,13 @@ import type { Nav, Screen } from './nav'
 import NoteForm, { type NoteTarget } from './NoteForm'
 import PeopleList from './PeopleList'
 import PeopleNav from './PeopleNav'
+import PersonCard from './PersonCard'
+import PersonForm from './PersonForm'
 import QuickAdd from './QuickAdd'
+
+const BACK_LABELS: Record<Screen['kind'], string> = {
+  list: 'Люди', events: 'События', event: 'Событие', person: 'Назад', spheres: 'Назад', patch: 'Назад',
+}
 
 /** Мини-приложение «Люди» на весь экран; своя нижняя панель, панель дневника скрыта. */
 export default function PeopleApp({ meta, patchJson, onExit, onOpenDay }: {
@@ -26,16 +32,20 @@ export default function PeopleApp({ meta, patchJson, onExit, onOpenDay }: {
   const [query, setQuery] = useState('')
   const [adding, setAdding] = useState(false)
   const [noteTarget, setNoteTarget] = useState<NoteTarget | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const data = useLiveQuery(getPeopleData)
   if (!data) return null
 
   const screen = stack[stack.length - 1]
   const root = stack[0].kind === 'events' ? 'events' : 'list'
+  const backLabel = BACK_LABELS[stack[stack.length - 2]?.kind ?? root]
+  const applied = meta.appliedPatches ?? []
   const nav: Nav = {
     push: (s) => setStack((st) => [...st, s]),
     back: () => setStack((st) => (st.length > 1 ? st.slice(0, -1) : st)),
     openDay: onOpenDay,
   }
+  const editing = editingId ? data.people.find((p) => p.id === editingId) ?? null : null
 
   return (
     <div className="flex h-dvh flex-col">
@@ -43,7 +53,15 @@ export default function PeopleApp({ meta, patchJson, onExit, onOpenDay }: {
         {screen.kind === 'list' && (
           <PeopleList data={data} filter={filter} onFilter={setFilter} query={query} onQuery={setQuery} nav={nav} />
         )}
-        {screen.kind !== 'list' && (
+        {screen.kind === 'person' && (
+          <PersonCard
+            key={screen.id} data={data} id={screen.id} applied={applied} backLabel={backLabel} nav={nav}
+            onEdit={() => setEditingId(screen.id)}
+            onOpenNote={(n) => setNoteTarget({ personId: n.personId, note: n })}
+            onNewNote={() => setNoteTarget({ personId: screen.id })}
+          />
+        )}
+        {screen.kind !== 'list' && screen.kind !== 'person' && (
           <div className="mx-auto flex max-w-md flex-col gap-3.5 px-5 pt-[max(28px,env(safe-area-inset-top))] pb-6">
             <button type="button" onClick={nav.back} className="self-start text-accent">‹ Назад</button>
             <h1 className="font-serif text-[30px] font-semibold">{screen.kind}</h1>
@@ -67,6 +85,15 @@ export default function PeopleApp({ meta, patchJson, onExit, onOpenDay }: {
         />
       )}
       {noteTarget && <NoteForm data={data} target={noteTarget} today={today} onClose={() => setNoteTarget(null)} />}
+      {editing && (
+        <PersonForm
+          key={editing.id} data={data} person={editing} onClose={() => setEditingId(null)}
+          onDeleted={() => {
+            setEditingId(null)
+            setStack([{ kind: root }])
+          }}
+        />
+      )}
     </div>
   )
 }

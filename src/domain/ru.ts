@@ -12,6 +12,12 @@ const MONTHS_GENITIVE = [
 
 const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
 
+/** «25 октября» — дата записи в ленте человека. */
+export function dayMonth(day: string): string {
+  const d = parseDay(day)
+  return `${d.getDate()} ${MONTHS_GENITIVE[d.getMonth()]}`
+}
+
 /** «25 окт» — дата в строках списков и ленты. */
 export function shortDay(day: string): string {
   const d = parseDay(day)

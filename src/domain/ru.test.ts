@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { dayGroupTitle, formatDateTime, formatDayTitle, monthName, monthTitle, plural, shortDay, weekdayName } from './ru'
+import { dayGroupTitle, formatDateTime, formatDayTitle, monthName, monthTitle, plural, dayMonth, shortDay, weekdayName } from './ru'
 
 describe('dayGroupTitle', () => {
   it('сегодня, вчера, иначе день недели', () => {
@@ -56,5 +56,12 @@ describe('shortDay', () => {
     expect(shortDay('2026-10-25')).toBe('25 окт')
     expect(shortDay('2026-05-03')).toBe('3 мая')
     expect(shortDay('2027-01-01')).toBe('1 янв')
+  })
+})
+
+describe('dayMonth', () => {
+  it('число и месяц в родительном падеже', () => {
+    expect(dayMonth('2026-10-25')).toBe('25 октября')
+    expect(dayMonth('2026-09-01')).toBe('1 сентября')
   })
 })
