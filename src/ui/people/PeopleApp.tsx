@@ -16,6 +16,7 @@ import PeopleNav from './PeopleNav'
 import PersonCard from './PersonCard'
 import PersonForm from './PersonForm'
 import QuickAdd from './QuickAdd'
+import SpheresScreen from './SpheresScreen'
 
 const BACK_LABELS: Record<Screen['kind'], string> = {
   list: 'Люди', events: 'События', event: 'Событие', person: 'Назад', spheres: 'Назад', patch: 'Назад',
@@ -71,7 +72,8 @@ export default function PeopleApp({ meta, patchJson, onExit, onOpenDay }: {
         {screen.kind === 'event' && (
           <EventScreen key={screen.id} data={data} id={screen.id} backLabel={backLabel} nav={nav} onEdit={() => setEventForm({ id: screen.id })} />
         )}
-        {(screen.kind === 'spheres' || screen.kind === 'patch') && (
+        {screen.kind === 'spheres' && <SpheresScreen data={data} backLabel={backLabel} nav={nav} />}
+        {screen.kind === 'patch' && (
           <div className="mx-auto flex max-w-md flex-col gap-3.5 px-5 pt-[max(28px,env(safe-area-inset-top))] pb-6">
             <button type="button" onClick={nav.back} className="self-start text-accent">‹ Назад</button>
             <h1 className="font-serif text-[30px] font-semibold">{screen.kind}</h1>
