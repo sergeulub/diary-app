@@ -40,24 +40,27 @@
 5. **Экспорт — контракт:** один `diary-ГГГГ-ММ-ДД.zip` = `backup.json` (весь дневник, для импорта) +
    `entries_ГГГГ-ММ-ДД_ГГГГ-ММ-ДД.md` (один файл с днями, изменёнными с прошлого экспорта, для Claude).
    Имена файлов латиницей. Формат менять только с повышением `formatVersion`; импорт старых версий не ломать.
-   Сейчас `formatVersion: 4` (4 — операции накоплений «Отложил»/«Взял»; 3 — разборы насмотренности; фото — файлами `photos/<id>.jpg` в том же zip, в `backup.json`
-   только их метаданные).
+   Сейчас `formatVersion: 5` (5 — модуль «Люди»: шесть таблиц в `backup.json` и папка `people/` в zip — выгрузка для
+   Claude; 4 — операции накоплений «Отложил»/«Взял»; 3 — разборы насмотренности; фото — файлами `photos/<id>.jpg` в
+   том же zip, в `backup.json` только их метаданные). Обратно с ПК приходит файл изменений `people-patch-….json`
+   (контракты — ТЗ «Люди», Б3–Б4).
 6. **Все оценки — метрики:** новый пункт — строкой в `metricDefinitions`, без миграции схемы.
 7. **Логика** (даты, серия, сон, экспорт/импорт, метрики) — чистые функции в `domain/` без DOM, с тестами.
 8. **Доступ к данным** — только через слой `db/`: чтобы позже обернуть в Capacitor без переписывания.
 9. При старте — `navigator.storage.persist()`; баннер о бэкапе, если с последнего экспорта прошло > 7 дней.
 
-## Модель данных v3
+## Модель данных v4
 | Таблица | Поля |
 |---|---|
 | `days` | `day` (ключ, ГГГГ-ММ-ДД), `id`, `metrics{key: value}`, `text`, `createdAt`, `updatedAt`, `deletedAt` |
 | `metricDefinitions` | `key`, `name`, `type` (scale / time / number / bool), `unit`, `order`, `archived`, `primary`, `face` |
 | `entries` | Записи внутри дня; сейчас — разборы насмотренности: `id`, `day`, `kind: 'review'`, `text` (что это, для кого, что обещает), `verdict`, `change`, метки, `deletedAt` |
 | `photos` | `id`, `entryId`, `day`, `type`, `bytes` (Uint8Array, JPEG ≤ 1600 px), метки, `deletedAt` (у удалённого пустые `bytes`) |
-| `meta` | `boundaryHour`, `lastExportAt`, `schemaVersion` |
+| `meta` | `boundaryHour`, `lastExportAt`, `schemaVersion`, `appliedPatches` (применённые файлы изменений с ПК) |
 | `financeCategories` | `key`, `kind` (expense / income), `name`, `importance` (need / useful / optional, только траты), `order`, `archived` |
 | `transactions` | `id`, `day`, `kind` (expense / income / save «Отложил» / withdraw «Взял»), `amount` (копейки), `categoryKey` (у save/withdraw пустой), `note`, `createdAt`, `updatedAt`, `deletedAt` |
 | `goals` | `id`, `month` (ГГГГ-ММ), `text`, `area`, `target` (измерение, необязательно), `order`, метки, `deletedAt` |
+| `people`, `personNotes`, `events`, `spheres`, `circles`, `personLinks` | Модуль «Люди»: люди, лента записей («встреча» / «из дневника»), события, сферы, круги, связи «знаком с» — поля в ТЗ `docs/superpowers/specs/2026-10-22-contacts-crm-design.md`, Б1 |
 
 Стартовые метрики: `mood` «Настроение» (главная, красит календарь), `boredom` «Скука», `sleepStart` «Лёг»,
 `sleepEnd` «Встал».
@@ -67,18 +70,22 @@
 насмотренности под текстом дня) ·
 **Финансы** (месяц: доход, траты, отложено — только вручную «Отложил» минус «Взял», всего в накоплениях; траты по важности и категориям; операции по дням; быстрый ввод «+») ·
 **Цели** (цели месяца, прогресс измеримых, в том числе «Разборы») · **Календарь** (месяц, дни по цвету настроения, тап → правка дня) ·
-**Настройки** (метрики, категории, граница дня, экспорт/импорт).
+**Настройки** (карточка «Люди», метрики, категории, граница дня, экспорт/импорт).
+**«Люди»** — мини-приложение на весь экран из «Настроек», своя панель **Люди · События · «+» · Дневник**: список с
+поиском и фильтрами, быстрое добавление, карточка с лентой-хроникой, события, сферы и круги, изменения с ПК (макеты
+9–14 в холсте Claude Design).
 Настроение и скука — нарисованные мордочки «от руки» (SVG), не эмодзи. Токены цвета и правила — в спецификации MVP,
 §8; цвета важности и макеты финансов и целей — в спецификации финансов, §6.1; разборы — спецификация
 `docs/superpowers/specs/2026-10-17-reviews-design.md`.
 
 ## Структура
 - `src/domain/` — чистая логика (даты, метрики, сон, серия, календарь, деньги, финансы, цели, разборы, экспорт, импорт) с
-  тестами рядом (`*.test.ts`).
-- `src/db/` — Dexie-схема `diary` v3 и функции доступа (`diary.ts`), `navigator.storage`; тесты на `fake-indexeddb`.
-- `src/ui/` — экраны Итог, Календарь, Настройки; общая форма дня `DayForm` с разборами `Reviews.tsx`; мордочки `faces.tsx`.
+  тестами рядом (`*.test.ts`); «Люди» — `people.ts`, `peopleList.ts`, `peopleExport.ts`, `peoplePatch.ts`, `peoplePreview.ts`.
+- `src/db/` — Dexie-схема `diary` v4 и функции доступа (`diary.ts`, `people.ts`), `navigator.storage`; тесты на `fake-indexeddb`.
+- `src/ui/` — экраны Итог, Календарь, Настройки; общая форма дня `DayForm` с разборами `Reviews.tsx`; мордочки `faces.tsx`;
+  модуль «Люди» — `src/ui/people/` (оболочка `PeopleApp`).
 - `public/` — иконки PWA (генерируются `npm run icons` из `public/icon.svg`).
-- `docs/superpowers/` — спецификации и планы; `docs/phase0-results.md`, `docs/phase1-results.md` — проверки на iPhone.
+- `docs/superpowers/` — спецификации и планы; `docs/phase*-results.md` — проверки на iPhone.
 
 ## Этапы
 - **Фаза 0** — скелет PWA на GitHub Pages → установить на iPhone → авиарежим и проверки из спецификации §10.
@@ -108,3 +115,7 @@
   «Взял» (без категорий), плюс баланс «Всего в накоплениях»; `formatVersion: 4`. Спецификация
   `docs/superpowers/specs/2026-10-17-savings-design.md`, план `docs/superpowers/plans/2026-10-17-savings.md`, макет —
   артборд «8 · Накопления».
+- [24.10.2026] Версия 1.5.0: модуль «Люди» — личная CRM знакомых (ТЗ `docs/superpowers/specs/2026-10-22-contacts-crm-design.md`,
+  планы `…-people-data.md` и `…-people-screens.md`, макеты 9–14); схема v4, `formatVersion: 5`, папка `people/` в zip,
+  файл изменений с ПК с ручной правкой каждого изменения. Проверка на iPhone — `docs/phase3-people-results.md`.
+  Работа с базой на ПК — ТЗ 2 в `LIFE/diary-analysis`.
