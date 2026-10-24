@@ -4,22 +4,28 @@ import { getPeopleData } from '../../db/people'
 import { DEFAULT_FILTER, type PeopleFilter } from '../../domain/peopleList'
 import type { Meta } from '../../domain/types'
 import { primeKeyboard } from '../financeUi'
+import { useLogicalToday } from '../useLogicalToday'
 import type { Nav, Screen } from './nav'
+import NoteForm, { type NoteTarget } from './NoteForm'
 import PeopleList from './PeopleList'
 import PeopleNav from './PeopleNav'
+import QuickAdd from './QuickAdd'
 
 /** Мини-приложение «Люди» на весь экран; своя нижняя панель, панель дневника скрыта. */
-export default function PeopleApp({ patchJson, onExit, onOpenDay }: {
+export default function PeopleApp({ meta, patchJson, onExit, onOpenDay }: {
   meta: Meta
   patchJson?: string
   onExit: () => void
   onOpenDay: (day: string) => void
 }) {
+  const today = useLogicalToday(meta.boundaryHour)
   const [stack, setStack] = useState<Screen[]>(() =>
     patchJson ? [{ kind: 'list' }, { kind: 'patch', json: patchJson }] : [{ kind: 'list' }])
   // фильтры и поиск живут здесь: возврат из карточки их не сбрасывает
   const [filter, setFilter] = useState<PeopleFilter>(DEFAULT_FILTER)
   const [query, setQuery] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [noteTarget, setNoteTarget] = useState<NoteTarget | null>(null)
   const data = useLiveQuery(getPeopleData)
   if (!data) return null
 
@@ -44,7 +50,23 @@ export default function PeopleApp({ patchJson, onExit, onOpenDay }: {
           </div>
         )}
       </main>
-      <PeopleNav active={root} onTab={(t) => setStack([{ kind: t }])} onAdd={primeKeyboard} onExit={onExit} />
+      <PeopleNav
+        active={root} onTab={(t) => setStack([{ kind: t }])} onExit={onExit}
+        onAdd={() => {
+          primeKeyboard()
+          setAdding(true)
+        }}
+      />
+      {adding && (
+        <QuickAdd
+          data={data} today={today} onClose={() => setAdding(false)}
+          onOpenNote={(t) => {
+            setAdding(false)
+            setNoteTarget(t)
+          }}
+        />
+      )}
+      {noteTarget && <NoteForm data={data} target={noteTarget} today={today} onClose={() => setNoteTarget(null)} />}
     </div>
   )
 }
