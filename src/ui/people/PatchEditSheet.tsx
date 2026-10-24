@@ -39,11 +39,12 @@ export default function PatchEditSheet({ o, title, subtitle, decision, onSave, o
     Object.fromEntries(keys.map((k) => [k, asText(decision?.set?.[k] ?? proposed[k])])))
   const phone = (k: string) => (o.op.op === 'renameSphere' ? o.before.name : o.before[k])
 
+  /** Только поля, которые отличаются от предложения файла; пусто — правки нет, операция просто отмечена. */
   function save() {
-    const set = Object.fromEntries(keys.map((k) => [
+    const changed = keys.filter((k) => values[k] !== asText(proposed[k]))
+    onSave(Object.fromEntries(changed.map((k) => [
       k, LIST_FIELDS.has(k) ? values[k].split(',').map((s) => s.trim()).filter(Boolean) : values[k],
-    ]))
-    onSave(set)
+    ])))
   }
 
   return (

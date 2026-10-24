@@ -6,7 +6,7 @@ import {
   type PatchOp, type PatchPlan, type PlannedOp,
 } from '../../domain/peoplePatch'
 import { FIELD_LABELS, opTitle, previewGroups } from '../../domain/peoplePreview'
-import { formatDateTime } from '../../domain/ru'
+import { dayMonth, formatDateTime } from '../../domain/ru'
 import type { Contact, Meta, PeopleData } from '../../domain/types'
 import { errorText } from '../errors'
 import type { Nav } from './nav'
@@ -48,10 +48,11 @@ function diffLines(o: PlannedOp, set?: Record<string, unknown>): { label: string
     const neu = op.op === 'renameSphere' && typeof set?.newName === 'string' ? set.newName : o.after.name
     return [{ label: '', old: o.before.name, neu }]
   }
+  const fmt = (k: string, v: string) => (k === 'day' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? dayMonth(v) : v)
   return Object.keys(o.after).map((k) => ({
     label: FIELD_LABELS[k] ?? k,
-    old: o.before[k] ?? '',
-    neu: set && k in set ? shown(set[k]) : o.after[k],
+    old: fmt(k, o.before[k] ?? ''),
+    neu: fmt(k, set && k in set ? shown(set[k]) : o.after[k]),
   }))
 }
 
@@ -293,7 +294,10 @@ export default function PatchScreen({ data, meta, json, backLabel, nav }: {
           title={previewGroups({ ...plan, ops: [editOp] }, data)[0]?.title || opTitle(editOp, data)}
           subtitle={opTitle(editOp, data)}
           onClose={() => setStage({ ...preview, editing: null })}
-          onSave={(set) => setStage({ ...preview, editing: null, decisions: { ...decisions, [editOp.index]: { selected: true, set } } })}
+          onSave={(set) => setStage({
+            ...preview, editing: null,
+            decisions: { ...decisions, [editOp.index]: Object.keys(set).length ? { selected: true, set } : { selected: true } },
+          })}
         />
       )}
     </div>

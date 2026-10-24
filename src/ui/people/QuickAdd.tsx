@@ -10,7 +10,7 @@ import type { NoteTarget } from './NoteForm'
 import PersonFieldsEditor, { emptyFields } from './PersonFields'
 import {
   Avatar, BottomSheet, CALENDAR_ICON, CLOSE_ICON, EVENT_ICON, Field, PEOPLE_ICON, chipClass, dashedChipClass, fieldClass,
-  icon, primaryClass, secondaryClass,
+  icon, primaryClass,
 } from './peopleUi'
 
 /** Быстрая форма (артборд 10): только имя и «Что запомнил»; похожее имя — выбор «это он» или «другой». */
@@ -159,13 +159,13 @@ export default function QuickAdd({ data, today, onClose, onOpenNote }: {
             >
               Это он — добавить встречу к нему
             </button>
-            <button type="button" onClick={() => void create()} className={`${secondaryClass} border-[1.5px] border-accent text-accent`}>
+            <button
+              type="button" onClick={() => void create()}
+              className="flex min-h-[50px] items-center justify-center rounded-[14px] border-[1.5px] border-accent bg-surface px-4 text-[16px] font-semibold text-accent"
+            >
               Это другой человек
             </button>
           </div>
-          <p className="text-center text-[13px] text-muted">
-            Откроется новая встреча у {similar[chosen]?.name} — дата и заметка уже в ней
-          </p>
         </BottomSheet>
       )}
     </Sheet>
