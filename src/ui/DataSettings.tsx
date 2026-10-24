@@ -3,13 +3,14 @@ import { applyImport, exportSnapshot } from '../db/diary'
 import {
   ImportError, describeImport, extractArchive, importSize, parseImport, planImport, type ImportPlan,
 } from '../domain/importFormat'
+import { isPeoplePatchJson } from '../domain/peoplePatch'
 import { formatDateTime } from '../domain/ru'
 import type { Meta } from '../domain/types'
 import { errorText } from './errors'
 import ExportButton from './ExportButton'
 import { Card } from './MetricCards'
 
-function ImportPanel() {
+function ImportPanel({ onPeoplePatch }: { onPeoplePatch: (json: string) => void }) {
   const [plan, setPlan] = useState<ImportPlan | null>(null)
   const [status, setStatus] = useState<string | null>(null)
 
@@ -22,6 +23,11 @@ function ImportPanel() {
     setStatus('Читаю файл…')
     try {
       const { json, files } = extractArchive(new Uint8Array(await file.arrayBuffer()))
+      if (isPeoplePatchJson(json)) {
+        setStatus(null)
+        onPeoplePatch(json)
+        return
+      }
       const backup = parseImport(json, files)
       const next = planImport(await exportSnapshot(), backup)
       setStatus(describeImport(next))
@@ -66,7 +72,7 @@ function ImportPanel() {
   )
 }
 
-export default function DataSettings({ meta }: { meta: Meta }) {
+export default function DataSettings({ meta, onPeoplePatch }: { meta: Meta; onPeoplePatch: (json: string) => void }) {
   return (
     <Card title="Данные">
       <p className="text-[15px] text-muted">
@@ -77,7 +83,7 @@ export default function DataSettings({ meta }: { meta: Meta }) {
         Архив отправляется в Telegram «Избранное»; на ПК — сохранить из Telegram Desktop. Импорт принимает этот zip или
         backup.json из него; совпадающие дни заменяются более свежей версией.
       </p>
-      <ImportPanel />
+      <ImportPanel onPeoplePatch={onPeoplePatch} />
     </Card>
   )
 }

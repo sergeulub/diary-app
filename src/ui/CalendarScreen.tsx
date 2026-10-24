@@ -40,10 +40,14 @@ const ArrowButton = ({ label, disabled, onClick, d }: { label: string; disabled?
   </button>
 )
 
-export default function CalendarScreen({ meta }: { meta: Meta }) {
+/** initialDay — открыть форму этого дня сразу (запись «из дневника» в «Людях»). */
+export default function CalendarScreen({ meta, initialDay = null }: { meta: Meta; initialDay?: string | null }) {
   const today = useLogicalToday(meta.boundaryHour)
-  const [ym, setYm] = useState<YearMonth>(() => ({ year: Number(today.slice(0, 4)), month0: Number(today.slice(5, 7)) - 1 }))
-  const [open, setOpen] = useState<string | null>(null)
+  const [ym, setYm] = useState<YearMonth>(() => {
+    const day = initialDay ?? today
+    return { year: Number(day.slice(0, 4)), month0: Number(day.slice(5, 7)) - 1 }
+  })
+  const [open, setOpen] = useState<string | null>(initialDay)
   const touchX = useRef<number | null>(null)
 
   const cells = monthGrid(ym.year, ym.month0)

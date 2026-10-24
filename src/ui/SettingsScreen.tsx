@@ -5,13 +5,20 @@ import DataSettings from './DataSettings'
 import { Card } from './MetricCards'
 import CategoriesSettings from './CategoriesSettings'
 import MetricsSettings from './MetricsSettings'
+import PeopleEntryCard from './people/PeopleEntryCard'
 
 const HOURS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 
-export default function SettingsScreen({ meta }: { meta: Meta }) {
+export default function SettingsScreen({ meta, onOpenPeople, onPeoplePatch }: {
+  meta: Meta
+  onOpenPeople: () => void
+  /** Файл изменений с ПК, выбранный в импорте, — в предпросмотр «Людей». */
+  onPeoplePatch: (json: string) => void
+}) {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-3.5 px-5 pt-[max(28px,env(safe-area-inset-top))] pb-6">
       <h1 className="font-serif text-[30px] font-semibold">Настройки</h1>
+      <PeopleEntryCard onOpen={onOpenPeople} />
       <MetricsSettings />
       <CategoriesSettings />
       <Card title="Граница дня">
@@ -26,7 +33,7 @@ export default function SettingsScreen({ meta }: { meta: Meta }) {
           </select>
         </label>
       </Card>
-      <DataSettings meta={meta} />
+      <DataSettings meta={meta} onPeoplePatch={onPeoplePatch} />
       <Card title="Напоминание">
         <div className="flex flex-col gap-2 text-[15px] leading-[1.5] text-muted">
           <p>
