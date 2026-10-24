@@ -119,3 +119,5 @@
   планы `…-people-data.md` и `…-people-screens.md`, макеты 9–14); схема v4, `formatVersion: 5`, папка `people/` в zip,
   файл изменений с ПК с ручной правкой каждого изменения. Проверка на iPhone — `docs/phase3-people-results.md`.
   Работа с базой на ПК — ТЗ 2 в `LIFE/diary-analysis`.
+  1.5.1: новая версия включается сама (`registerType: 'autoUpdate'`) — при `prompt` ожидающий сервис-воркер на iOS
+  мог не включиться никогда, и обновление не доходило до телефона.

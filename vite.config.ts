@@ -14,7 +14,9 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'prompt',
+      // новая версия включается сама сразу после установки: на iOS ожидающая версия может не дождаться,
+      // пока все окна приложения закроются (обновление «не доходило» до телефона)
+      registerType: 'autoUpdate',
       injectRegister: 'auto',
       includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'icon.svg'],
       manifest: {
