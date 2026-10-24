@@ -1,10 +1,14 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
 import { getPeopleData } from '../../db/people'
+import { meetingAtEvent } from '../../domain/people'
 import { DEFAULT_FILTER, type PeopleFilter } from '../../domain/peopleList'
 import type { Meta } from '../../domain/types'
-import { primeKeyboard } from '../financeUi'
+import { now, primeKeyboard } from '../financeUi'
 import { useLogicalToday } from '../useLogicalToday'
+import EventForm from './EventForm'
+import EventScreen from './EventScreen'
+import EventsScreen from './EventsScreen'
 import type { Nav, Screen } from './nav'
 import NoteForm, { type NoteTarget } from './NoteForm'
 import PeopleList from './PeopleList'
@@ -33,6 +37,8 @@ export default function PeopleApp({ meta, patchJson, onExit, onOpenDay }: {
   const [adding, setAdding] = useState(false)
   const [noteTarget, setNoteTarget] = useState<NoteTarget | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  /** Форма события: id правки или null — новое. */
+  const [eventForm, setEventForm] = useState<{ id: string | null } | null>(null)
   const data = useLiveQuery(getPeopleData)
   if (!data) return null
 
@@ -61,7 +67,11 @@ export default function PeopleApp({ meta, patchJson, onExit, onOpenDay }: {
             onNewNote={() => setNoteTarget({ personId: screen.id })}
           />
         )}
-        {screen.kind !== 'list' && screen.kind !== 'person' && (
+        {screen.kind === 'events' && <EventsScreen data={data} nav={nav} onNew={() => setEventForm({ id: null })} />}
+        {screen.kind === 'event' && (
+          <EventScreen key={screen.id} data={data} id={screen.id} backLabel={backLabel} nav={nav} onEdit={() => setEventForm({ id: screen.id })} />
+        )}
+        {(screen.kind === 'spheres' || screen.kind === 'patch') && (
           <div className="mx-auto flex max-w-md flex-col gap-3.5 px-5 pt-[max(28px,env(safe-area-inset-top))] pb-6">
             <button type="button" onClick={nav.back} className="self-start text-accent">‹ Назад</button>
             <h1 className="font-serif text-[30px] font-semibold">{screen.kind}</h1>
@@ -81,6 +91,25 @@ export default function PeopleApp({ meta, patchJson, onExit, onOpenDay }: {
           onOpenNote={(t) => {
             setAdding(false)
             setNoteTarget(t)
+          }}
+        />
+      )}
+      {eventForm && (
+        <EventForm
+          key={eventForm.id ?? 'new'} data={data} today={today}
+          event={eventForm.id ? data.events.find((e) => e.id === eventForm.id) ?? null : null}
+          onClose={(savedId) => {
+            const created = !eventForm.id && savedId
+            setEventForm(null)
+            if (created) nav.push({ kind: 'event', id: savedId })
+          }}
+          onDeleted={() => {
+            setEventForm(null)
+            setStack([{ kind: 'events' }])
+          }}
+          onAddPerson={(ev, person) => {
+            const m = meetingAtEvent(person.id, ev, now())
+            setNoteTarget({ personId: person.id, draft: { day: m.day, eventId: m.eventId, occasion: m.occasion } })
           }}
         />
       )}
